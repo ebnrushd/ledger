@@ -1,0 +1,91 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Admin Dashboard - SQL Ledger{% endblock %}
+
+{% block page_title %}Dashboard Overview{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-4 mb-3">
+        <div class="card text-white bg-primary">
+            <div class="card-body">
+                <h5 class="card-title">Total Customers</h5>
+                <p class="card-text fs-2">{{ summary_data.total_customers if summary_data and summary_data.total_customers is not none else "N/A" }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <h5 class="card-title">Total Accounts</h5>
+                <p class="card-text fs-2">{{ summary_data.total_accounts if summary_data and summary_data.total_accounts is not none else "N/A" }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card text-dark bg-info"> {# Changed bg for better text visibility #}
+            <div class="card-body">
+                <h5 class="card-title">Total System Balance</h5>
+                <p class="card-text fs-2">{{ "%.2f"|format(summary_data.total_system_balance_sum) if summary_data and summary_data.total_system_balance_sum is not none else "N/A" }}</p>
+                <small class="text-white">{{ summary_data.total_system_balance_currency_note if summary_data else "" }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Transactions (Last 24h)</h5>
+                <p class="card-text fs-2">{{ summary_data.transactions_last_24h if summary_data and summary_data.transactions_last_24h is not none else "N/A" }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <h3>Recent Transactions</h3>
+        {% if summary_data and summary_data.recent_transactions %}
+        <div class="table-responsive">
+            <table class="table table-striped table-sm">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Timestamp</th>
+                        <th>Account Number</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tx in summary_data.recent_transactions %}
+                    <tr>
+                        <td><a href="{{ request.url_for('admin_view_transaction', transaction_id=tx.id) }}">{{ tx.id }}</a></td>
+                        <td>{{ tx.timestamp | replace("T", " ") }}</td>
+                        <td><a href="{{ request.url_for('admin_view_account', account_id=tx.account_id if tx.account_id else '#') }}">{{ tx.account_number }}</a></td> {# Assuming tx.account_id is available to link #}
+                        <td>{{ tx.type }}</td>
+                        <td>{{ "%.2f"|format(tx.amount) }}</td>
+                        <td>{{ tx.description if tx.description else "" }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6">No recent transactions found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+            <p>No recent transaction data available.</p>
+        {% endif %}
+    </div>
+</div>
+
+{% if summary_data and summary_data.error %}
+<div class="alert alert-warning mt-3" role="alert">
+    Could not load all dashboard data: {{ summary_data.error }}
+</div>
+{% endif %}
+
+{% endblock %}
+```

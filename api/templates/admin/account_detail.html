@@ -1,0 +1,166 @@
+{% extends "admin/base.html" %}
+
+{% set acc_number = account.account_number if account else "N/A" %}
+
+{% block title %}Account Details: {{ acc_number }} - SQL Ledger Admin{% endblock %}
+
+{% block page_title %}Account Details: <small class="text-muted">{{ acc_number }}</small>{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-7">
+        <div class="card mb-3">
+            <div class="card-header">
+                Account Information
+            </div>
+            <div class="card-body">
+                {% if account %}
+                <dl class="row">
+                    <dt class="col-sm-4">Account ID:</dt>
+                    <dd class="col-sm-8">{{ account.account_id }}</dd>
+
+                    <dt class="col-sm-4">Account Number:</dt>
+                    <dd class="col-sm-8">{{ account.account_number }}</dd>
+
+                    <dt class="col-sm-4">Customer:</dt>
+                    <dd class="col-sm-8">
+                        {% if customer %}
+                        <a href="{{ request.url_for('admin_view_customer', customer_id=account.customer_id) }}">{{ customer.first_name }} {{ customer.last_name }} (ID: {{ account.customer_id }})</a>
+                        {% else %}
+                        Customer ID: {{ account.customer_id }} (Details not loaded)
+                        {% endif %}
+                    </dd>
+
+                    <dt class="col-sm-4">Type:</dt>
+                    <dd class="col-sm-8">{{ account.account_type|title }}</dd>
+
+                    <dt class="col-sm-4">Balance:</dt>
+                    <dd class="col-sm-8">{{ "%.2f"|format(account.balance) }} {{ account.currency }}</dd>
+
+                    <dt class="col-sm-4">Status:</dt>
+                    <dd class="col-sm-8">
+                        <span class="badge
+                            {% if account.status_name == 'active' %}bg-success
+                            {% elif account.status_name == 'frozen' %}bg-warning text-dark
+                            {% elif account.status_name == 'closed' %}bg-danger
+                            {% else %}bg-secondary
+                            {% endif %}">
+                            {{ account.status_name|replace("_", " ")|title }}
+                        </span>
+                    </dd>
+
+                    <dt class="col-sm-4">Overdraft Limit:</dt>
+                    <dd class="col-sm-8">{{ "%.2f"|format(account.overdraft_limit) }} {{ account.currency }}</dd>
+
+                    <dt class="col-sm-4">Opened At:</dt>
+                    <dd class="col-sm-8">{{ account.opened_at.strftime('%Y-%m-%d %H:%M:%S %Z') if account.opened_at else "N/A" }}</dd>
+
+                    <dt class="col-sm-4">Last Updated At:</dt>
+                    <dd class="col-sm-8">{{ account.updated_at.strftime('%Y-%m-%d %H:%M:%S %Z') if account.updated_at else "N/A" }}</dd>
+                </dl>
+                {% elif error %}
+                    <div class="alert alert-danger" role="alert">{{ error }}</div>
+                {% else %}
+                    <div class="alert alert-warning" role="alert">Account data not available or account not found.</div>
+                {% endif %}
+            </div>
+        </div>
+        <p><a href="{{ request.url_for('admin_list_accounts') }}" class="btn btn-outline-secondary btn-sm">
+            <span data-feather="arrow-left" class="align-text-bottom"></span> Back to Account List
+        </a></p>
+    </div>
+
+    <div class="col-lg-5">
+        {% if account %}
+        <div class="card mb-3">
+            <div class="card-header">Manage Account</div>
+            <div class="card-body">
+                {# Display form errors/success specific to these forms #}
+                {% if error_form_status %} <div class="alert alert-danger small p-2">{{ error_form_status }}</div> {% endif %}
+                {% if error_form_overdraft %} <div class="alert alert-danger small p-2">{{ error_form_overdraft }}</div> {% endif %}
+                {# Success messages are handled by query param in base.html #}
+
+                <form method="post" action="{{ request.url_for('admin_update_account_status', account_id=account.account_id) }}" class="mb-3">
+                    <label for="status" class="form-label"><strong>Update Status:</strong></label>
+                    <div class="input-group input-group-sm">
+                        <select class="form-select" id="status" name="status_name"> {# Name changed to status_name to match router #}
+                            {% for status_option in available_statuses %}
+                            <option value="{{ status_option.status_name }}" {% if status_option.status_name == account.status_name %}selected{% endif %}>
+                                {{ status_option.status_name|replace("_", " ")|title }}
+                            </option>
+                            {% else %}
+                            <option value="active">Active</option>
+                            <option value="frozen">Frozen</option>
+                            <option value="closed">Closed</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-warning">Update Status</button>
+                    </div>
+                </form>
+                <hr>
+                <form method="post" action="{{ request.url_for('admin_update_overdraft_limit', account_id=account.account_id) }}">
+                    <label for="overdraft_limit" class="form-label"><strong>Update Overdraft Limit:</strong></label>
+                    <div class="input-group input-group-sm">
+                        <input type="number" step="0.01" class="form-control" id="overdraft_limit" name="overdraft_limit" value="{{ "%.2f"|format(account.overdraft_limit) }}">
+                        <span class="input-group-text">{{ account.currency }}</span>
+                        <button type="submit" class="btn btn-warning">Update Limit</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row mt-2">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                Recent Transactions (Last 10)
+                {% if account %}
+                <a href="{{ request.url_for('admin_list_transactions') }}?account_number_filter={{ account.account_number }}" class="btn btn-sm btn-outline-primary">View All for this Account</a>
+                {% endif %}
+            </div>
+            <div class="card-body p-0"> {# p-0 to make table fit card nicely #}
+                {% if transactions and transactions|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Timestamp</th>
+                                <th>Type</th>
+                                <th class="text-end">Amount</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tx in transactions %}
+                            <tr>
+                                <td><a href="{{ request.url_for('admin_view_transaction', transaction_id=tx.transaction_id) }}">{{ tx.transaction_id }}</a></td>
+                                <td>{{ tx.transaction_timestamp.strftime('%Y-%m-%d %H:%M') if tx.transaction_timestamp else 'N/A' }}</td>
+                                <td>{{ tx.type_name|replace("_", " ")|title }}</td>
+                                <td class="text-end {% if tx.amount < 0 %}text-danger{% else %}text-success{% endif %}">{{ "%.2f"|format(tx.amount) }}</td>
+                                <td>{{ tx.description|truncate(50) if tx.description else "" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% elif account %}
+                <p class="p-3">No recent transactions found for this account.</p>
+                {% endif %}
+            </div>
+            {% if account %}
+            <div class="card-footer text-center">
+                 <a href="{{ request.url_for('admin_list_accounts') }}/{{ account.account_id }}/statement?start_date={{ (current_date - timedelta(days=30)).strftime('%Y-%m-%d') }}&end_date={{ current_date.strftime('%Y-%m-%d') }}" class="btn btn-sm btn-success">
+                    <span data-feather="file-text" class="align-text-bottom"></span> Generate Statement (Last 30 Days)
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+```

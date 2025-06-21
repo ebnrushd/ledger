@@ -1,0 +1,79 @@
+{% extends "admin/base.html" %}
+
+{% set page_action = "Create New" if not user else "Edit" %}
+{% set current_username = user.username if user else "" %}
+
+{% block title %}{{ page_action }} User {{ current_username }} - SQL Ledger Admin{% endblock %}
+
+{% block page_title %}{{ page_action }} User <small class="text-muted">{{ current_username }}</small>{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                User Information
+            </div>
+            <div class="card-body">
+                {# Display general form errors passed from the backend #}
+                {% if errors %}
+                <div class="alert alert-danger" role="alert">
+                    <strong>Please correct the following errors:</strong>
+                    <ul>
+                        {% for error in errors %}
+                        <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                <form method="post" action="{{ form_action_url }}">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="username" name="username" value="{{ form_data.username if form_data else (user.username if user else '') }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control" id="email" name="email" value="{{ form_data.email if form_data else (user.email if user else '') }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password {% if not user %}<span class="text-danger">*</span>{% endif %}</label>
+                        <input type="password" class="form-control" id="password" name="password" {{ "required" if not user else "" }}>
+                        {% if user %}<small class="form-text text-muted">Leave blank to keep current password.</small>{% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label for="role_id" class="form-label">Role ID <span class="text-danger">*</span></label>
+                        {# In a real UI, this would be a select dropdown populated from `roles` table #}
+                        {# Example:
+                           <select class="form-select" id="role_id" name="role_id" required>
+                                {% for role in available_roles %}
+                                <option value="{{ role.role_id }}" {% if (form_data and form_data.role_id == role.role_id|string) or (user and user.role_id == role.role_id) %}selected{% endif %}>
+                                    {{ role.role_name }}
+                                </option>
+                                {% endfor %}
+                           </select>
+                        #}
+                        <input type="number" class="form-control" id="role_id" name="role_id" value="{{ form_data.role_id if form_data else (user.role_id if user else '1') }}" required>
+                        <small class="form-text text-muted">Example Role IDs: 1 (customer), 2 (teller), 3 (admin).</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="customer_id" class="form-label">Customer ID (Optional)</label>
+                        <input type="number" class="form-control" id="customer_id" name="customer_id" value="{{ form_data.customer_id if form_data and form_data.customer_id is not none else (user.customer_id if user and user.customer_id is not none else '') }}">
+                        <small class="form-text text-muted">Link this user to a customer profile. Ensure Customer ID exists.</small>
+                    </div>
+                    <div class="mb-3 form-check">
+                        {# Default to checked for new user, otherwise use user's current status #}
+                        {% set is_active_val = (form_data.is_active if form_data and form_data.is_active is not none else (user.is_active if user is not none else True)) %}
+                        <input type="checkbox" class="form-check-input" id="is_active" name="is_active" value="on" {% if is_active_val %}checked{% endif %}>
+                        <label class="form-check-label" for="is_active">User is Active</label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">{{ "Create User" if not user else "Update User" }}</button>
+                    <a href="{{ request.url_for('admin_list_users') }}" class="btn btn-secondary">Cancel</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+```

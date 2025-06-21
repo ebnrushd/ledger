@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+psycopg2-binary
+pydantic
+python-multipart # For FileResponse and form data if needed later
+jinja2 # For nice error templates or HTML responses, optional but good for default exc handlers
+
+# Testing dependencies
+pytest
+pytest-cov
+pytest-env # To manage environment variables for tests (e.g., test DB config)
+python-dotenv # For loading .env files if used for test DB config
+```

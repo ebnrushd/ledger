@@ -1,0 +1,15 @@
+/*
+  This file can be used for truly global custom base styles
+  that are not covered by Tailwind's preflight or utility classes,
+  or for custom component classes if not using @apply in .vue files.
+
+  For now, most global styling will come from tailwind.css and
+  component-specific styles.
+*/
+
+body {
+  /* Example: A default background color for the entire app if not set by layouts */
+  /* background-color: #f7fafc; /* Tailwind's gray-100 */
+  /* font-family: defined in tailwind.config.js now */
+}
+```

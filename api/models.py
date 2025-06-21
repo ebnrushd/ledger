@@ -212,6 +212,130 @@ class AuditLogEntry(BaseModel):
         allow_population_by_field_name = True
 
 
+# --- Authentication / Token Models ---
+class TokenData(BaseModel):
+    username: Optional[str] = None
+    # Could add other fields like user_id, scopes (roles) if needed in token payload
+    # For example:
+    # user_id: Optional[int] = None
+    # role: Optional[str] = None
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+# --- User Models for API (schemas) ---
+# Basic user info returned by API (no password hash)
+class UserSchema(BaseModel):
+    user_id: int
+    username: EmailStr # Assuming username is email for JWT sub, or just username
+    email: EmailStr
+    role_name: str
+    is_active: bool
+    customer_id: Optional[int] = None # If linked to a customer profile
+    created_at: datetime
+    last_login: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True
+
+# For user creation via API (e.g., registration)
+class UserCreateAPI(BaseModel):
+    username: EmailStr # Often email is used as username for login
+    password: str = Field(..., min_length=8)
+    email: EmailStr # Can be same as username or different
+    first_name: str = Field(..., min_length=1) # For creating associated customer profile
+    last_name: str = Field(..., min_length=1)  # For creating associated customer profile
+    phone_number: Optional[str] = None
+    address: Optional[str] = None
+
+
+# For fetching user from DB including hashed password (internal use for auth)
+class UserInDB(UserSchema): # Extends UserSchema, adds hashed_password
+    hashed_password: str
+    # role_id: int # Already implicitly part of UserSchema if role_name comes from a join on role_id
+
+
+# --- Admin API Specific Models ---
+# (Many can reuse existing models like UserSchema, CustomerDetails, AccountDetails, TransactionDetails)
+
+# Wrappers for list responses with pagination
+class PaginatedResponse(BaseModel):
+    total_items: int
+    total_pages: int
+    page: int
+    per_page: int
+
+class AdminUserListResponse(PaginatedResponse):
+    users: List[UserSchema] # Reusing UserSchema for individual user details
+
+class AdminCustomerListResponse(PaginatedResponse):
+    customers: List[CustomerDetails]
+
+class AdminAccountListResponse(PaginatedResponse):
+    accounts: List[AccountDetails]
+
+class AdminTransactionListResponse(PaginatedResponse):
+    transactions: List[TransactionDetails]
+
+class AdminAuditLogListResponse(PaginatedResponse):
+    audit_logs: List[AuditLogEntry] # AuditLogEntry already defined
+
+# Request bodies for Admin User Management (if different from UserCreateAPI or if more fields)
+class AdminUserCreateRequest(BaseModel):
+    username: EmailStr
+    password: str = Field(..., min_length=8)
+    email: EmailStr
+    role_id: int
+    customer_id: Optional[int] = None
+    is_active: bool = True
+
+class AdminUserUpdateRequest(BaseModel):
+    username: Optional[EmailStr] = None
+    password: Optional[str] = Field(None, min_length=8) # Optional password change
+    email: Optional[EmailStr] = None
+    role_id: Optional[int] = None
+    customer_id: Optional[int] = None # Use `NoneType` or `Optional[Optional[int]]` if you need to explicitly set customer_id to NULL
+    is_active: Optional[bool] = None
+
+# Request bodies for Admin Account Management
+class AdminAccountStatusUpdateRequest(BaseModel):
+    status: str # e.g., "active", "frozen", "closed" - validation can be done in endpoint
+
+class AdminOverdraftLimitUpdateRequest(BaseModel):
+    limit: Decimal = Field(..., ge=0)
+
+    @validator('limit', pre=True, always=True)
+    def validate_limit_decimal(cls, v): # Renamed validator
+        return Decimal(str(v))
+
+# Response for Admin Dashboard Data
+class AdminDashboardRecentTransaction(BaseModel): # Simplified from full TransactionDetails if needed
+    id: int
+    timestamp: str # ISO format
+    account_number: str
+    type: str
+    amount: Decimal
+    description: Optional[str] = None
+
+    @validator('amount', pre=True, always=True)
+    def validate_dashboard_tx_amount(cls, v):
+        return Decimal(str(v))
+
+
+class AdminDashboardData(BaseModel):
+    total_customers: int
+    total_accounts: int
+    total_system_balance_sum: Decimal
+    total_system_balance_currency_note: str
+    transactions_last_24h: int
+    recent_transactions: List[AdminDashboardRecentTransaction]
+
+    @validator('total_system_balance_sum', pre=True, always=True)
+    def validate_dashboard_total_balance(cls, v):
+        return Decimal(str(v))
+
+
 # --- Accounting Validator Models (Example if needed for API response) ---
 class LedgerIntegrityResponse(BaseModel):
     is_balanced: bool

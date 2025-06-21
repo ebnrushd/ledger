@@ -106,7 +106,7 @@ FOR EACH ROW EXECUTE FUNCTION prevent_deletes();
 -- Table for money box serials
 CREATE TABLE money_box_serials (
     serial_number TEXT PRIMARY KEY,
-    status TEXT NOT NULL DEFAULT 'VALID' CHECK (status IN ('VALID', 'VOIDED')),
+    status TEXT NOT NULL DEFAULT 'VALID' CHECK (status IN ('VALID', 'INVALID')),
     imported_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 

@@ -1,0 +1,83 @@
+{% extends "admin/base.html" %}
+
+{% set customer_name = (customer.first_name + " " + customer.last_name) if customer else "N/A" %}
+
+{% block title %}Customer Details: {{ customer_name }} - SQL Ledger Admin{% endblock %}
+
+{% block page_title %}Customer Profile: <small class="text-muted">{{ customer_name }}</small>{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                Customer Information
+                {# Placeholder for edit link if admin can edit customer PII directly #}
+                {# <a href="{{ request.url_for('admin_edit_customer_form', customer_id=customer.customer_id) }}" class="btn btn-sm btn-warning">
+                    <span data-feather="edit-2" class="align-text-bottom"></span> Edit Customer
+                </a> #}
+            </div>
+            <div class="card-body">
+                {% if customer %}
+                <dl class="row">
+                    <dt class="col-sm-4">Customer ID:</dt>
+                    <dd class="col-sm-8">{{ customer.customer_id }}</dd>
+
+                    <dt class="col-sm-4">Name:</dt>
+                    <dd class="col-sm-8">{{ customer.first_name }} {{ customer.last_name }}</dd>
+
+                    <dt class="col-sm-4">Email:</dt>
+                    <dd class="col-sm-8">{{ customer.email }}</dd>
+
+                    <dt class="col-sm-4">Phone:</dt>
+                    <dd class="col-sm-8">{{ customer.phone_number if customer.phone_number else "N/A" }}</dd>
+
+                    <dt class="col-sm-4">Address:</dt>
+                    <dd class="col-sm-8">{{ customer.address if customer.address else "N/A" }}</dd>
+
+                    <dt class="col-sm-4">Created At:</dt>
+                    <dd class="col-sm-8">{{ customer.created_at.strftime('%Y-%m-%d %H:%M:%S %Z') if customer.created_at else "N/A" }}</dd>
+                </dl>
+                {% elif error %}
+                    <div class="alert alert-danger" role="alert">{{ error }}</div>
+                {% else %}
+                    <div class="alert alert-warning" role="alert">Customer data not available or customer not found.</div>
+                {% endif %}
+            </div>
+        </div>
+         <p><a href="{{ request.url_for('admin_list_customers') }}" class="btn btn-outline-secondary btn-sm">
+            <span data-feather="arrow-left" class="align-text-bottom"></span> Back to Customer List
+        </a></p>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-header">
+                Associated Accounts
+            </div>
+            <div class="card-body">
+                {% if error_accounts %}
+                    <div class="alert alert-warning" role="alert">{{ error_accounts }}</div>
+                {% endif %}
+                {% if accounts and accounts|length > 0 %}
+                <div class="list-group">
+                    {% for account in accounts %}
+                    <a href="{{ request.url_for('admin_view_account', account_id=account.account_id) }}" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">Acc #: {{ account.account_number }}</h6>
+                            <small class="text-muted">{{ account.status_name }}</small>
+                        </div>
+                        <p class="mb-1">{{ account.account_type.title() }} - Balance: {{ "%.2f"|format(account.balance) }} {{ account.currency }}</p>
+                        <small class="text-muted">Overdraft Limit: {{ "%.2f"|format(account.overdraft_limit) }} {{ account.currency }}</small>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% elif not error_accounts %}
+                <p>No accounts associated with this customer.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+```

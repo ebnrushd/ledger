@@ -1,0 +1,123 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Transaction Monitoring - SQL Ledger Admin{% endblock %}
+
+{% block page_title %}Transaction Monitoring{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        Transaction List
+    </div>
+    <div class="card-body">
+        <form method="get" action="{{ request.url_for('admin_list_transactions') }}" class="row row-cols-lg-auto g-3 align-items-center mb-3">
+            <div class="col-12">
+                <label for="account_number_filter" class="visually-hidden">Account Number</label>
+                <input type="text" class="form-control form-control-sm" id="account_number_filter" name="account_number_filter" placeholder="Account #" value="{{ account_number_filter if account_number_filter else '' }}">
+            </div>
+            {#
+            <div class="col-12">
+                <label for="date_from_filter" class="visually-hidden">From Date</label>
+                <input type="date" class="form-control form-control-sm" id="date_from_filter" name="date_from_filter" value="{{ date_from_filter if date_from_filter else '' }}">
+            </div>
+            <div class="col-12">
+                <label for="date_to_filter" class="visually-hidden">To Date</label>
+                <input type="date" class="form-control form-control-sm" id="date_to_filter" name="date_to_filter" value="{{ date_to_filter if date_to_filter else '' }}">
+            </div>
+            #}
+            <div class="col-12">
+                <label for="type_filter" class="visually-hidden">Transaction Type</label>
+                <select class="form-select form-select-sm" id="type_filter" name="type_filter">
+                    <option value="">All Types</option>
+                    {% for tx_type in available_transaction_types %}
+                    <option value="{{ tx_type.type_name }}" {% if type_filter == tx_type.type_name %}selected{% endif %}>
+                        {{ tx_type.type_name.replace("_", " ")|title }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+            </div>
+            <div class="col-12">
+                 {% if account_number_filter or type_filter %} {# Add other filters here too #}
+                    <a href="{{ request.url_for('admin_list_transactions') }}" class="btn btn-sm btn-outline-secondary">Clear Filters</a>
+                {% endif %}
+            </div>
+        </form>
+
+        {% if error %}
+            <div class="alert alert-danger" role="alert">{{ error }}</div>
+        {% endif %}
+
+        {% if transactions %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-sm">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Timestamp</th>
+                        <th>Account #</th>
+                        <th>Type</th>
+                        <th class="text-end">Amount</th>
+                        <th>Description</th>
+                        <th>Related Acc. #</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tx in transactions %}
+                    <tr>
+                        <td>{{ tx.transaction_id }}</td>
+                        <td>{{ tx.transaction_timestamp.strftime('%Y-%m-%d %H:%M:%S') if tx.transaction_timestamp else 'N/A' }}</td>
+                        <td><a href="{{ request.url_for('admin_view_account', account_id=tx.account_id) }}">{{ tx.account_number }}</a></td>
+                        <td>{{ tx.type_name.replace("_", " ")|title }}</td>
+                        <td class="text-end {% if tx.amount < 0 %}text-danger{% elif tx.amount > 0 %}text-success{% endif %}">{{ "%.2f"|format(tx.amount) }}</td>
+                        <td>{{ tx.description|truncate(50) if tx.description else "" }}</td>
+                        <td>
+                            {% if tx.related_account_id and tx.related_account_number %}
+                                <a href="{{ request.url_for('admin_view_account', account_id=tx.related_account_id) }}">{{ tx.related_account_number }}</a>
+                            {% elif tx.related_account_id %}
+                                ID: {{ tx.related_account_id }}
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ request.url_for('admin_view_transaction', transaction_id=tx.transaction_id) }}" class="btn btn-sm btn-info">
+                                <span data-feather="eye" class="align-text-bottom"></span> View
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {# Pagination controls #}
+        {% if total_pages and total_pages > 1 %}
+        <nav aria-label="Transaction pagination" class="mt-3">
+            <ul class="pagination pagination-sm justify-content-center">
+                <li class="page-item {% if current_page == 1 %}disabled{% endif %}">
+                    <a class="page-link" href="{{ request.url_for('admin_list_transactions', page=current_page - 1, account_number_filter=account_number_filter, type_filter=type_filter) }}">Previous</a>
+                </li>
+                {% for page_num in range(1, total_pages + 1) %}
+                <li class="page-item {% if page_num == current_page %}active{% endif %}">
+                    <a class="page-link" href="{{ request.url_for('admin_list_transactions', page=page_num, account_number_filter=account_number_filter, type_filter=type_filter) }}">{{ page_num }}</a>
+                </li>
+                {% endfor %}
+                <li class="page-item {% if current_page == total_pages %}disabled{% endif %}">
+                    <a class="page-link" href="{{ request.url_for('admin_list_transactions', page=current_page + 1, account_number_filter=account_number_filter, type_filter=type_filter) }}">Next</a>
+                </li>
+            </ul>
+        </nav>
+        <p class="text-center text-muted small">Showing page {{ current_page }} of {{ total_pages }} ({{ total_transactions }} total transactions)</p>
+        {% endif %}
+
+        {% elif not error %}
+            <p>No transactions found matching your criteria.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+```

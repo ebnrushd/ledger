@@ -1,0 +1,105 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Manage Users - SQL Ledger Admin{% endblock %}
+
+{% block page_title %}User Management{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between mb-3">
+    <form method="get" action="{{ request.url_for('admin_list_users') }}" class="row g-2 align-items-center">
+        <div class="col-auto">
+            <input type="text" class="form-control form-control-sm" name="search_query" placeholder="Search username, email, role..." value="{{ search_query if search_query else '' }}">
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-sm btn-primary">Search</button>
+        </div>
+         <div class="col-auto">
+            {% if search_query %}
+                <a href="{{ request.url_for('admin_list_users') }}" class="btn btn-sm btn-outline-secondary">Clear Search</a>
+            {% endif %}
+        </div>
+    </form>
+    <a href="{{ request.url_for('admin_new_user_form') }}" class="btn btn-success">
+        <span data-feather="plus-circle" class="align-text-bottom"></span> Add New User
+    </a>
+</div>
+
+{% if users %}
+<div class="table-responsive">
+    <table class="table table-striped table-hover table-sm">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Customer ID</th>
+                <th>Created At</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>{{ user.user_id }}</td>
+                <td>{{ user.username }}</td>
+                <td>{{ user.email }}</td>
+                <td>{{ user.role_name }}</td>
+                <td>
+                    {% if user.is_active %}
+                        <span class="badge bg-success">Active</span>
+                    {% else %}
+                        <span class="badge bg-danger">Inactive</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if user.customer_id %}
+                        <a href="{{ request.url_for('admin_view_customer', customer_id=user.customer_id) }}">{{ user.customer_id }}</a>
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </td>
+                <td>{{ user.created_at.strftime('%Y-%m-%d %H:%M') if user.created_at else 'N/A' }}</td>
+                <td>
+                    <a href="{{ request.url_for('admin_view_user', user_id=user.user_id) }}" class="btn btn-sm btn-info">View</a>
+                    <a href="{{ request.url_for('admin_edit_user_form', user_id=user.user_id) }}" class="btn btn-sm btn-warning">Edit</a>
+                    {# Add delete button/form if needed #}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{# Pagination controls - Basic example #}
+{% if total_pages > 1 %}
+<nav aria-label="User pagination">
+    <ul class="pagination pagination-sm justify-content-center">
+        {# Previous Page Link #}
+        <li class="page-item {% if current_page == 1 %}disabled{% endif %}">
+            <a class="page-link" href="{{ request.url_for('admin_list_users', page=current_page - 1, search_query=search_query if search_query else None) }}">Previous</a>
+        </li>
+
+        {# Page Number Links - simplified, could be more complex with ellipses #}
+        {% for page_num in range(1, total_pages + 1) %}
+        <li class="page-item {% if page_num == current_page %}active{% endif %}">
+            <a class="page-link" href="{{ request.url_for('admin_list_users', page=page_num, search_query=search_query if search_query else None) }}">{{ page_num }}</a>
+        </li>
+        {% endfor %}
+
+        {# Next Page Link #}
+        <li class="page-item {% if current_page == total_pages %}disabled{% endif %}">
+            <a class="page-link" href="{{ request.url_for('admin_list_users', page=current_page + 1, search_query=search_query if search_query else None) }}">Next</a>
+        </li>
+    </ul>
+</nav>
+<p class="text-center text-muted small">Showing page {{ current_page }} of {{ total_pages }} ({{ total_users }} total users)</p>
+{% endif %}
+
+{% else %}
+    <p>No users found matching your criteria.</p>
+{% endif %}
+
+{% endblock %}
+```

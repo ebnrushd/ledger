@@ -10,4 +10,7 @@ pytest
 pytest-cov
 pytest-env # To manage environment variables for tests (e.g., test DB config)
 python-dotenv # For loading .env files if used for test DB config
+passlib[bcrypt] # For password hashing
+starlette # For SessionMiddleware (FastAPI is built on Starlette)
+itsdangerous # For signing session cookies (often a dependency of SessionMiddleware)
 ```

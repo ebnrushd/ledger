@@ -35,7 +35,23 @@ except ImportError as e:
     # ... (repeat for all other custom exceptions)
     # This is getting complex, so relying on correct execution environment (PYTHONPATH includes project root)
     # is the cleaner way.
-    raise
+    # raise # Commenting out raise for now to allow API to start even if a specific core exception isn't found during dev.
+    # In production, this should ideally be a hard fail. For this tool, let's be more lenient on imports if a specific sub-module exception isn't used yet.
+    pass
+
+
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware # For session management
+
+# Define a global SECRET_KEY for session middleware.
+# IMPORTANT: This should be a strong, random string and ideally loaded from environment variables.
+# For demonstration, a placeholder is used here.
+# In a real app: `os.getenv("FASTAPI_SESSION_SECRET_KEY", "fallback_secret_if_not_set_for_dev_only")`
+# Ensure `python-dotenv` is in requirements if using .env files for this.
+# For this tool's environment, we'll hardcode a simple one.
+# If running in an environment where os.environ can be set, that's better.
+SESSION_SECRET_KEY = "super_secret_key_for_sql_ledger_admin_demo" # REPLACE IN PRODUCTION
 
 
 app = FastAPI(
@@ -67,6 +83,37 @@ async def pydantic_validation_exception_handler(request: Request, exc: Validatio
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, # Or 422 if it's clear it's client-side input causing response model error
         content={"detail": "Pydantic Model Validation Error (likely in response)", "errors": exc.errors()},
     )
+
+@app.exception_handler(HTTPException) # More general HTTPException handler
+async def http_exception_handler_admin_aware(request: Request, exc: HTTPException):
+    """Custom HTTPException handler to render HTML error pages for admin panel if appropriate."""
+    # print(f"HTTPException caught: Status {exc.status_code}, Detail: {exc.detail}, Path: {request.url.path}")
+    if request.url.path.startswith("/admin") and "text/html" in request.headers.get("accept", ""):
+        if exc.status_code == status.HTTP_403_FORBIDDEN:
+            return request.state.templates.TemplateResponse("admin/error_403.html", {
+                "request": request,
+                "page_title": "Access Denied",
+                "detail": exc.detail
+            }, status_code=exc.status_code)
+        # Could add handlers for 404 within admin to render a themed 404 page
+        # if exc.status_code == status.HTTP_404_NOT_FOUND:
+        #     return request.state.templates.TemplateResponse("admin/error_404.html", {
+        #         "request": request, "page_title": "Not Found", "detail": exc.detail
+        #     }, status_code=exc.status_code)
+
+    # Default behavior for API type HttpExceptions or non-admin HTML requests
+    # Ensure headers are passed along if they were set (like for redirects in dependencies)
+    if exc.headers:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+            headers=exc.headers
+        )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
 
 # Custom exceptions from the `core` modules
 @app.exception_handler(CustomerNotFoundError)
@@ -121,11 +168,32 @@ async def generic_exception_handler(request: Request, exc: Exception):
 
 
 # --- Include Routers ---
-app.include_router(customers.router)
-app.include_router(accounts.router)
-app.include_router(transactions.router)
-app.include_router(fees.router)
-app.include_router(reports.router)
+# Public/User-facing API routers
+app.include_router(customers.router, prefix="/api/v1") # Example: versioning public API
+app.include_router(accounts.router, prefix="/api/v1")
+app.include_router(transactions.router, prefix="/api/v1")
+app.include_router(fees.router, prefix="/api/v1")
+app.include_router(reports.router, prefix="/api/v1")
+
+# Admin Routers (prefixed with /admin by their own router config)
+from .routers.admin import dashboard as admin_dashboard_router
+from .routers.admin import users as admin_users_router
+from .routers.admin import customers as admin_customers_router
+from .routers.admin import accounts as admin_accounts_router
+from .routers.admin import transactions as admin_transactions_router
+from .routers.admin import audit as admin_audit_router
+from .routers.admin import auth as admin_auth_router # Import the new auth router
+
+app.include_router(admin_auth_router.router) # Add auth router first, or ensure no global deps conflict
+app.include_router(admin_dashboard_router.router)
+app.include_router(admin_users_router.router)
+app.include_router(admin_customers_router.router)
+app.include_router(admin_accounts_router.router)
+app.include_router(admin_transactions_router.router)
+app.include_router(admin_audit_router.router)
+# Note: The prefix="/admin" is already defined in each admin router.
+# So, they will be accessible at /admin/dashboard, /admin/users etc.
+# Auth routes like /admin/login will also correctly fall under this.
 
 
 @app.get("/", tags=["Root"], summary="Root path of the API")
@@ -150,4 +218,31 @@ async def read_root():
 # core functions would need to be refactored to accept an existing connection/cursor.
 # This is a known simplification for this subtask. The current setup ensures each core
 # operation is atomic on its own.
+
+# --- Add Middleware ---
+# SessionMiddleware must be added before routers that use sessions.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET_KEY,
+    # session_cookie="ledger_admin_session", # Optional: customize cookie name
+    # max_age=14 * 24 * 60 * 60,  # Optional: e.g., 14 days in seconds
+    # https_only=True, # Optional: Recommended for production if served over HTTPS
+)
+
+
+# --- Mount static files and templates ---
+# This assumes you have a 'static' directory in 'api/' for admin UI's CSS/JS
+# For now, we only create the templates directory. Static files can be added later if needed.
+# app.mount("/static", StaticFiles(directory="api/static"), name="static") # Example
+
+# Templates directory for Jinja2
+templates = Jinja2Templates(directory="api/templates")
+
+# Make templates available to request state for easier access in path operations
+# (Alternative to passing `templates` instance around or importing it everywhere)
+@app.middleware("http")
+async def add_templates_to_request_state(request: Request, call_next):
+    request.state.templates = templates
+    response = await call_next(request)
+    return response
 ```

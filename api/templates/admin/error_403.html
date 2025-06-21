@@ -1,0 +1,26 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Access Denied - SQL Ledger Admin{% endblock %}
+
+{% block page_title %}Access Denied (403 Forbidden){% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="alert alert-danger" role="alert">
+        <h4 class="alert-heading">Permission Denied!</h4>
+        <p>
+            You do not have the necessary permissions to access this page or perform this action.
+        </p>
+        <hr>
+        <p class="mb-0">
+            If you believe this is an error, please contact the system administrator.
+            Detail: {{ detail if detail else "No specific detail provided." }}
+        </p>
+    </div>
+    <p>
+        <a href="{{ request.url_for('admin_dashboard') }}" class="btn btn-primary">Go to Dashboard</a>
+        <a href="javascript:history.back()" class="btn btn-outline-secondary">Go Back</a>
+    </p>
+</div>
+{% endblock %}
+```

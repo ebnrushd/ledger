@@ -231,5 +231,114 @@ def create_account_fx(db_conn, create_customer_fx):
         return account_id
     return _create_account
 
+# --- Admin User & Auth Fixtures ---
+
+@pytest.fixture(scope="function") # Function scope to ensure clean user for each test if needed
+def create_admin_user(db_conn):
+    """Fixture to create an 'admin' user. Returns user details dict."""
+    from core.user_service import create_user, UserAlreadyExistsError, get_user_by_username_for_auth # Assuming get_user_by_username_for_auth exists or use get_user_by_id
+    from core.auth_utils import hash_password # For direct creation if create_user doesn't handle ON CONFLICT well for tests
+
+    # Ensure 'admin' role exists (role_id 3 from auth_schema.sql)
+    with db_conn.cursor() as cur:
+        cur.execute("INSERT INTO roles (role_id, role_name) VALUES (3, 'admin') ON CONFLICT (role_id) DO NOTHING;")
+        db_conn.commit()
+
+    username = "test_admin_user"
+    email = "test_admin@example.com"
+    password = "AdminPassword123!"
+
+    try:
+        # Attempt to fetch first, then create if not exists, to handle potential re-runs more gracefully
+        # This is complex with hashed passwords. For tests, simpler to delete and recreate or use ON CONFLICT.
+        # The db_conn fixture already clears tables, so this should be fine.
+        user_id = create_user(username, password, email, role_id=3, conn=db_conn)
+        # `create_user` now commits if it manages its own connection, or expects caller to commit if conn is passed.
+        # Since db_conn is function-scoped and manages its own transaction lifecycle (implicitly via psycopg2 or explicitly),
+        # and create_user uses the passed conn, the commit should happen at the end of the test or when db_conn commits.
+        # However, create_user was modified to commit if it creates its own conn.
+        # For clarity and to ensure data is available for login test *within this fixture's scope*,
+        # we might need an explicit commit if create_user doesn't do it when conn is passed.
+        # Let's assume create_user with a passed conn does not commit itself.
+        # The db_conn fixture itself doesn't explicitly start/commit transactions per call, relies on psycopg2 default or autocommit.
+        # For safety in fixtures setting up data:
+        # db_conn.commit() # Ensure user is committed before trying to log in with them.
+
+        # The create_user function in user_service.py now commits if it creates its own connection,
+        # or expects the caller to commit if a connection is passed. The test client login will be a separate request.
+        # So, the user needs to be in DB before login attempt.
+        # The db_conn fixture already handles clearing tables.
+        # create_user should use the passed `db_conn` and the commit should be handled by the test logic or fixture using it.
+        # For a fixture setting up data that another part of the test (like TestClient login) will use,
+        # it's crucial that the setup data is committed.
+        # The `db_conn` fixture in conftest.py does not start a transaction itself, psycopg2 connections
+        # are by default in "autocommit off" mode after first command, meaning an explicit commit is needed.
+        # Let's add an explicit commit after data creation within fixtures that set up data for subsequent actions.
+        db_conn.commit()
+
+
+    except UserAlreadyExistsError: # If user somehow exists from a failed previous cleanup
+        print(f"Admin user {username} already exists, fetching...")
+        # This part needs a function like get_user_by_username that returns all needed fields including ID.
+        # For simplicity, assume create_user handles it or tests are isolated.
+        # For now, if it exists, we assume it's fine.
+        # A more robust way: query for ID based on username.
+        with db_conn.cursor() as cur:
+            cur.execute("SELECT user_id FROM users WHERE username = %s;", (username,))
+            res = cur.fetchone()
+            if res: user_id = res[0]
+            else: raise # Should not happen if UserAlreadyExistsError was raised by create_user
+
+    return {"user_id": user_id, "username": username, "password": password, "email": email, "role_id": 3, "role_name": "admin"}
+
+@pytest.fixture(scope="function")
+def create_teller_user(db_conn):
+    """Fixture to create a 'teller' user."""
+    from core.user_service import create_user, UserAlreadyExistsError
+    with db_conn.cursor() as cur: # Ensure 'teller' role exists (role_id 2)
+        cur.execute("INSERT INTO roles (role_id, role_name) VALUES (2, 'teller') ON CONFLICT (role_id) DO NOTHING;")
+        db_conn.commit()
+    username = "test_teller_user"
+    try:
+        user_id = create_user(username, "TellerPassword123!", "teller@example.com", role_id=2, conn=db_conn)
+        db_conn.commit() # Commit after creation
+    except UserAlreadyExistsError:
+        with db_conn.cursor() as cur: # Fetch existing if conflict
+            cur.execute("SELECT user_id FROM users WHERE username = %s;", (username,))
+            user_id = cur.fetchone()[0]
+    return {"user_id": user_id, "username": username, "password": "TellerPassword123!", "role_name": "teller"}
+
+
+@pytest.fixture(scope="function")
+def authenticated_client(test_client: TestClient):
+    """
+    Returns a function that can log in a user and return an authenticated TestClient.
+    The returned client will have session cookies set.
+    """
+    def _authenticate(username, password):
+        # Login to get session cookies
+        login_data = {"username": username, "password": password}
+        response = test_client.post("/admin/login", data=login_data) # Use data for form posts
+
+        assert response.status_code == status.HTTP_303_SEE_OTHER # Redirect on success
+        assert "ledger_admin_session" in test_client.cookies # Check for session cookie
+        # print(f"Logged in as {username}, session cookie: {test_client.cookies.get('ledger_admin_session')}")
+        return test_client # Return the client instance which now has the cookie
+    return _authenticate
+
+
+@pytest.fixture(scope="function")
+def admin_client(authenticated_client, create_admin_user):
+    """Provides a TestClient authenticated as an 'admin' user."""
+    # create_admin_user fixture ensures the admin user exists in the DB.
+    # `authenticated_client` logs them in.
+    return authenticated_client(create_admin_user["username"], create_admin_user["password"])
+
+@pytest.fixture(scope="function")
+def teller_client(authenticated_client, create_teller_user):
+    """Provides a TestClient authenticated as a 'teller' user."""
+    return authenticated_client(create_teller_user["username"], create_teller_user["password"])
+
+
 # Add more fixtures as needed for transactions, fees, etc.
 ```

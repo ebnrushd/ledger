@@ -419,6 +419,108 @@ def process_ach_transaction(account_id, amount, description="ACH Transaction", a
         if conn: conn.close()
 
 
+def list_transactions(page=1, per_page=20, account_id_filter=None, transaction_type_filter=None,
+                      start_date_filter=None, end_date_filter=None, conn=None):
+    """
+    Lists transactions with pagination and optional filters.
+
+    Args:
+        page (int): Current page number.
+        per_page (int): Number of items per page.
+        account_id_filter (int, optional): Filter by specific account_id.
+        transaction_type_filter (str, optional): Filter by transaction type name.
+        start_date_filter (str or date, optional): Filter transactions on or after this date.
+        end_date_filter (str or date, optional): Filter transactions on or before this date (inclusive of day).
+        conn (psycopg2.connection, optional): Existing database connection.
+
+    Returns:
+        dict: Containing 'transactions' list, 'total_transactions', 'page', 'per_page'.
+    """
+    offset = (page - 1) * per_page
+
+    select_fields = """
+        t.transaction_id, t.account_id, a.account_number as primary_account_number,
+        t.transaction_type_id, tt.type_name, t.amount, t.transaction_timestamp, t.description,
+        t.related_account_id, ra.account_number as related_account_number
+    """
+    base_from_clause = """
+        FROM transactions t
+        JOIN accounts a ON t.account_id = a.account_id
+        JOIN transaction_types tt ON t.transaction_type_id = tt.transaction_type_id
+        LEFT JOIN accounts ra ON t.related_account_id = ra.account_id
+    """
+
+    count_query_base = f"SELECT COUNT(t.transaction_id) {base_from_clause}"
+    list_query_base = f"SELECT {select_fields} {base_from_clause}"
+
+    conditions = []
+    params = []
+
+    if account_id_filter is not None:
+        conditions.append("t.account_id = %s")
+        params.append(account_id_filter)
+
+    if transaction_type_filter:
+        conditions.append("tt.type_name = %s")
+        params.append(transaction_type_filter)
+
+    if start_date_filter:
+        conditions.append("t.transaction_timestamp >= %s")
+        params.append(start_date_filter) # Ensure this is a date or timestamp string 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS'
+
+    if end_date_filter:
+        # To include the whole end day, use < (end_date + 1 day) or adjust timestamp
+        if isinstance(end_date_filter, str) and len(end_date_filter) == 10: # 'YYYY-MM-DD'
+             end_date_param = end_date_filter + " 23:59:59.999999"
+        else:
+            end_date_param = end_date_filter
+        conditions.append("t.transaction_timestamp <= %s")
+        params.append(end_date_param)
+
+    if conditions:
+        where_clause = " WHERE " + " AND ".join(conditions)
+        count_query_base += where_clause
+        list_query_base += where_clause
+
+    list_query_base += " ORDER BY t.transaction_timestamp DESC, t.transaction_id DESC LIMIT %s OFFSET %s;"
+
+    list_params = params + [per_page, offset]
+
+    _conn_managed_internally = False
+    if not conn:
+        conn = get_db_connection()
+        _conn_managed_internally = True
+
+    transactions_list_of_dicts = []
+    total_transactions = 0
+    try:
+        with conn.cursor() as cur:
+            cur.execute(count_query_base, tuple(params))
+            total_transactions = cur.fetchone()[0]
+
+            cur.execute(list_query_base, tuple(list_params))
+            records = cur.fetchall()
+
+            colnames = [desc[0] for desc in cur.description]
+            for record_tuple in records:
+                tx_dict = dict(zip(colnames, record_tuple))
+                if 'amount' in tx_dict and tx_dict['amount'] is not None:
+                    tx_dict['amount'] = Decimal(str(tx_dict['amount']))
+                transactions_list_of_dicts.append(tx_dict)
+
+        return {
+            "transactions": transactions_list_of_dicts,
+            "total_transactions": total_transactions,
+            "page": page,
+            "per_page": per_page
+        }
+    except Exception as e:
+        raise TransactionError(f"Error listing transactions: {e}")
+    finally:
+        if _conn_managed_internally and conn and not conn.closed:
+            conn.close()
+
+
 if __name__ == '__main__':
     print("Running transaction_processing.py direct tests...")
 

@@ -1,0 +1,79 @@
+{% extends "admin/base.html" %}
+
+{% set tx_id_display = transaction.transaction_id if transaction else "N/A" %}
+
+{% block title %}Transaction Details: ID {{ tx_id_display }} - SQL Ledger Admin{% endblock %}
+
+{% block page_title %}Transaction Details: <small class="text-muted">ID {{ tx_id_display }}</small>{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-3">
+            <div class="card-header">
+                Transaction Information
+            </div>
+            <div class="card-body">
+                {% if transaction %}
+                <dl class="row">
+                    <dt class="col-sm-4">Transaction ID:</dt>
+                    <dd class="col-sm-8">{{ transaction.transaction_id }}</dd>
+
+                    <dt class="col-sm-4">Timestamp:</dt>
+                    <dd class="col-sm-8">{{ transaction.transaction_timestamp.strftime('%Y-%m-%d %H:%M:%S %Z') if transaction.transaction_timestamp else "N/A" }}</dd>
+
+                    <dt class="col-sm-4">Type:</dt>
+                    <dd class="col-sm-8">{{ transaction.type_name.replace("_", " ")|title }}</dd>
+
+                    <dt class="col-sm-4">Amount:</dt>
+                    <dd class="col-sm-8 {{ 'text-danger' if transaction.amount < 0 else 'text-success' if transaction.amount > 0 else '' }}">
+                        {{ "%.2f"|format(transaction.amount) }} {{ transaction.currency if transaction.currency else "" }}
+                    </dd>
+
+                    <dt class="col-sm-4">Description:</dt>
+                    <dd class="col-sm-8">{{ transaction.description if transaction.description else "N/A" }}</dd>
+                </dl>
+                {% elif error %}
+                    <div class="alert alert-danger" role="alert">{{ error }}</div>
+                {% else %}
+                     <div class="alert alert-warning" role="alert">Transaction data not available or transaction not found.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if transaction %}
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">Primary Account</div>
+            <div class="card-body">
+                 <p><strong>Account ID:</strong> <a href="{{ request.url_for('admin_view_account', account_id=transaction.account_id) }}">{{ transaction.account_id }}</a></p>
+                 <p><strong>Account Number:</strong> {{ transaction.primary_account_number if transaction.primary_account_number else "N/A" }}</p>
+                 <p><strong>Customer:</strong>
+                    {% if transaction.primary_customer_id %}
+                    <a href="{{ request.url_for('admin_view_customer', customer_id=transaction.primary_customer_id) }}">{{ transaction.customer_name if transaction.customer_name else "ID: " + transaction.primary_customer_id|string }}</a>
+                    {% else %}
+                    N/A
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        {% if transaction.related_account_id %}
+        <div class="card mb-3">
+            <div class="card-header">Related Account</div>
+            <div class="card-body">
+                <p><strong>Account ID:</strong> <a href="{{ request.url_for('admin_view_account', account_id=transaction.related_account_id) }}">{{ transaction.related_account_id }}</a></p>
+                <p><strong>Account Number:</strong> {{ transaction.related_account_number if transaction.related_account_number else "N/A" }}</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %} {# End if transaction #}
+</div>
+
+<p><a href="{{ request.url_for('admin_list_transactions') }}" class="btn btn-outline-secondary btn-sm">
+    <span data-feather="arrow-left" class="align-text-bottom"></span> Back to Transaction List
+</a></p>
+{% endblock %}
+```

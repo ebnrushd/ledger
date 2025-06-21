@@ -72,8 +72,111 @@ def log_event(action_type, target_entity, target_id, details, user_id=None, conn
         # In a real app, consider more specific error handling or logging to a fallback.
         raise AuditServiceError(f"Failed to log audit event for {target_entity} ID {target_id}: {e}")
     finally:
-        if not conn and _conn: # If we created a connection, we close it.
+        if not conn and _conn and not _conn.closed: # If we created a connection, we close it.
             _conn.close()
+
+
+def list_audit_logs(page=1, per_page=20, user_id_filter=None, action_type_filter=None,
+                    target_entity_filter=None, target_id_filter=None,
+                    start_date_filter=None, end_date_filter=None, conn=None):
+    """
+    Lists audit log entries with pagination and optional filters.
+
+    Args:
+        page (int): Current page number.
+        per_page (int): Number of items per page.
+        user_id_filter (int, optional): Filter by specific user_id.
+        action_type_filter (str, optional): Filter by action type (case-insensitive).
+        target_entity_filter (str, optional): Filter by target entity (case-insensitive).
+        target_id_filter (str, optional): Filter by target ID.
+        start_date_filter (str or date, optional): Filter logs on or after this date.
+        end_date_filter (str or date, optional): Filter logs on or before this date.
+        conn (psycopg2.connection, optional): Existing database connection.
+
+    Returns:
+        dict: Containing 'audit_logs' list, 'total_logs', 'page', 'per_page'.
+    """
+    offset = (page - 1) * per_page
+
+    select_fields = """
+        al.log_id, al.timestamp, al.user_id, u.username as user_username,
+        al.action_type, al.target_entity, al.target_id, al.details_json
+    """
+    base_from_clause = """
+        FROM audit_log al
+        LEFT JOIN users u ON al.user_id = u.user_id
+    """
+
+    count_query_base = f"SELECT COUNT(al.log_id) {base_from_clause}"
+    list_query_base = f"SELECT {select_fields} {base_from_clause}"
+
+    conditions = []
+    params = []
+
+    if user_id_filter is not None:
+        conditions.append("al.user_id = %s")
+        params.append(user_id_filter)
+    if action_type_filter:
+        conditions.append("al.action_type ILIKE %s")
+        params.append(f"%{action_type_filter}%")
+    if target_entity_filter:
+        conditions.append("al.target_entity ILIKE %s")
+        params.append(f"%{target_entity_filter}%")
+    if target_id_filter: # target_id is VARCHAR in schema
+        conditions.append("al.target_id ILIKE %s")
+        params.append(f"%{target_id_filter}%")
+    if start_date_filter:
+        conditions.append("al.timestamp >= %s")
+        params.append(start_date_filter)
+    if end_date_filter:
+        if isinstance(end_date_filter, str) and len(end_date_filter) == 10: # 'YYYY-MM-DD'
+             end_date_param = end_date_filter + " 23:59:59.999999"
+        else:
+            end_date_param = end_date_filter
+        conditions.append("al.timestamp <= %s")
+        params.append(end_date_param)
+
+    if conditions:
+        where_clause = " WHERE " + " AND ".join(conditions)
+        count_query_base += where_clause
+        list_query_base += where_clause
+
+    list_query_base += " ORDER BY al.timestamp DESC, al.log_id DESC LIMIT %s OFFSET %s;"
+
+    list_params = params + [per_page, offset]
+
+    _conn_managed_internally = False
+    if not conn:
+        conn = get_db_connection()
+        _conn_managed_internally = True
+
+    audit_logs_list_of_dicts = []
+    total_logs = 0
+    try:
+        with conn.cursor() as cur:
+            cur.execute(count_query_base, tuple(params))
+            total_logs = cur.fetchone()[0]
+
+            cur.execute(list_query_base, tuple(list_params))
+            records = cur.fetchall()
+
+            colnames = [desc[0] for desc in cur.description]
+            for record_tuple in records:
+                log_dict = dict(zip(colnames, record_tuple))
+                # details_json is already a dict/list due to psycopg2 JSONB handling
+                audit_logs_list_of_dicts.append(log_dict)
+
+        return {
+            "audit_logs": audit_logs_list_of_dicts,
+            "total_logs": total_logs,
+            "page": page,
+            "per_page": per_page
+        }
+    except Exception as e:
+        raise AuditServiceError(f"Error listing audit logs: {e}")
+    finally:
+        if _conn_managed_internally and conn and not conn.closed:
+            conn.close()
 
 
 # --- Specific Event Logging Functions (Examples) ---

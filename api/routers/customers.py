@@ -1,205 +1,151 @@
 import sys
 import os
-from fastapi import APIRouter, Depends, HTTPException, status, Body
-from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional
 
-# Adjust sys.path to include project root to find 'core' and 'database'
-# This assumes 'api' is a subdirectory of the project root.
-# This method of path adjustment is common for structuring larger projects.
-# Better approach: run uvicorn from project root, e.g. `uvicorn api.main:app --reload`
-# then imports like `from core import ...` work naturally if project root is in PYTHONPATH.
-# For this file, assuming PYTHONPATH is set up correctly by the runner.
 
-from ..dependencies import get_db, get_current_user_placeholder
+from ..dependencies import get_db, get_current_active_user_from_token
 from ..models import (
     CustomerCreate, CustomerUpdate, CustomerDetails,
-    HttpError, StatusResponse
+    HttpError, UserSchema
 )
 
-# Assuming core modules are importable. This requires 'sql-ledger/' to be in PYTHONPATH.
-# This is typically handled by running uvicorn from the 'sql-ledger/' directory.
-# Or, if 'sql-ledger' is an installable package.
 try:
-    from core import customer_management
+    from core import customer_management, audit_service
     from core.customer_management import CustomerNotFoundError
 except ImportError:
-    # Fallback for environments where 'core' is not directly in PYTHONPATH but one level up
-    # (e.g., if PWD is 'api' directory and 'core' is sibling to 'api')
     sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-    from core import customer_management
+    from core import customer_management, audit_service
     from core.customer_management import CustomerNotFoundError
 
 
 router = APIRouter(
     prefix="/customers",
-    tags=["Customers"],
+    tags=["Customers (v1)"],
     responses={404: {"description": "Not found", "model": HttpError}},
 )
 
-# Placeholder for current user - replace with actual auth
-CurrentUser = Depends(get_current_user_placeholder)
+# The POST /customers/ endpoint for general customer creation is removed from /api/v1.
+# Customer creation is now primarily handled by the /api/v1/auth/register endpoint,
+# which creates a user and a linked customer profile together.
+# If an admin needs to create customers directly without users, that would be an admin panel function.
 
-@router.post("/", response_model=CustomerDetails, status_code=status.HTTP_201_CREATED,
-             summary="Create a new customer",
-             responses={
-                 400: {"description": "Invalid input data", "model": HttpError},
-                 409: {"description": "Customer with this email already exists", "model": HttpError},
-                 500: {"description": "Internal server error", "model": HttpError}
-             })
-async def create_customer(
-    customer: CustomerCreate,
-    db_conn: customer_management.psycopg2.extensions.connection = Depends(get_db),
-    # current_user: dict = CurrentUser # TODO: Uncomment and use for authorization
+
+@router.get("/me", response_model=CustomerDetails, summary="Get current user's customer profile")
+async def get_my_customer_profile(
+    current_user: UserSchema = Depends(get_current_active_user_from_token),
+    db_conn = Depends(get_db)
 ):
     """
-    Create a new customer profile.
-    - **first_name**: Customer's first name (required)
-    - **last_name**: Customer's last name (required)
-    - **email**: Customer's unique email address (required)
-    - **phone_number**: Optional phone number
-    - **address**: Optional physical address
+    Retrieve the customer profile linked to the currently authenticated user.
     """
-    # TODO: Add authorization check - e.g., only admins or tellers can create customers.
-    # if current_user['role'] not in ['admin', 'teller']:
-    #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to create customers")
-
-    try:
-        # The core function `add_customer` uses `execute_query` which handles its own connection.
-        # For consistency with FastAPI's per-request connection, `add_customer` could be refactored
-        # to accept a connection/cursor. For now, we'll use it as is.
-        # If `add_customer` were refactored:
-        # customer_id = customer_management.add_customer(db_conn, customer.first_name, ...)
-
-        customer_id = customer_management.add_customer(
-            first_name=customer.first_name,
-            last_name=customer.last_name,
-            email=customer.email,
-            phone_number=customer.phone_number,
-            address=customer.address
+    if not current_user.customer_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No customer profile linked to this user account."
         )
-        if customer_id is None: # Should not happen if no exception, but as a safeguard
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create customer, no ID returned.")
-
-        # Fetch the created customer to return details
-        # `get_customer_by_id` also uses `execute_query`.
-        created_customer_details = customer_management.get_customer_by_id(customer_id)
-        return CustomerDetails(**created_customer_details)
-
-    except ValueError as ve: # Handles duplicate email from add_customer
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(ve))
-    except Exception as e:
-        # Log the exception e
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {e}")
-
-
-@router.get("/{customer_id}", response_model=CustomerDetails,
-            summary="Get customer details by ID",
-            responses={
-                403: {"description": "Not authorized", "model": HttpError},
-                500: {"description": "Internal server error", "model": HttpError}
-            })
-async def get_customer(
-    customer_id: int,
-    db_conn: customer_management.psycopg2.extensions.connection = Depends(get_db),
-    # current_user: dict = CurrentUser # TODO: Auth
-):
-    """
-    Retrieve details for a specific customer by their `customer_id`.
-    """
-    # TODO: Authorization:
-    # User might need to be an admin, teller, or the customer themselves.
-    # if current_user['role'] not in ['admin', 'teller'] and current_user.get('customer_id') != customer_id:
-    #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this customer")
     try:
-        customer_details = customer_management.get_customer_by_id(customer_id)
+        # Pass conn to core function
+        customer_details = customer_management.get_customer_by_id(current_user.customer_id, conn=db_conn)
         return CustomerDetails(**customer_details)
-    except CustomerNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except CustomerNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Linked customer profile not found.")
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {e}")
+        # Log e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred retrieving profile: {e}")
 
 
-@router.put("/{customer_id}", response_model=CustomerDetails,
-            summary="Update customer details",
-            responses={
-                400: {"description": "Invalid input", "model": HttpError},
-                403: {"description": "Not authorized", "model": HttpError},
-                409: {"description": "Email already exists for another customer", "model": HttpError},
-                500: {"description": "Internal server error", "model": HttpError}
-            })
-async def update_customer(
-    customer_id: int,
+def _data_actually_changed(update_data: dict, current_data_dict: dict) -> bool:
+    """Helper to check if any value in update_data is different from current_data."""
+    for key, value in update_data.items():
+        if key not in current_data_dict or current_data_dict[key] != value:
+            return True
+    return False
+
+@router.put("/me", response_model=CustomerDetails, summary="Update current user's customer profile")
+async def update_my_customer_profile(
     customer_update: CustomerUpdate,
-    db_conn: customer_management.psycopg2.extensions.connection = Depends(get_db),
-    # current_user: dict = CurrentUser # TODO: Auth
+    current_user: UserSchema = Depends(get_current_active_user_from_token),
+    db_conn = Depends(get_db)
 ):
     """
-    Update information for an existing customer.
+    Update the customer profile information for the currently authenticated user.
     Only provided fields will be updated.
     """
-    # TODO: Authorization:
-    # User might need to be an admin, or the customer themselves for certain fields.
-    # if current_user['role'] != 'admin' and current_user.get('customer_id') != customer_id:
-    #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this customer")
+    if not current_user.customer_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, # 403 because user is auth'd but no profile to update
+            detail="No customer profile linked to this user account to update."
+        )
 
-    # Convert Pydantic model to dict, excluding unset values to only update provided fields
     update_data = customer_update.dict(exclude_unset=True)
-    if not update_data:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields provided for update.")
+    if not update_data: # No actual fields sent for update
+        # Return current profile or an informative message
+        current_customer_details = customer_management.get_customer_by_id(current_user.customer_id, conn=db_conn)
+        return CustomerDetails(**current_customer_details)
+
 
     try:
-        # `update_customer_info` uses `execute_query`.
-        # It also internally calls `get_customer_by_id` first.
-        success = customer_management.update_customer_info(customer_id, **update_data)
+        old_customer_details_dict = customer_management.get_customer_by_id(current_user.customer_id, conn=db_conn)
 
-        if not success: # Should be caught by exceptions within update_customer_info generally
-             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                                 detail="Customer update failed for an unknown reason (no specific error raised by core function but no success).")
+        if not _data_actually_changed(update_data, old_customer_details_dict):
+            # No effective change, return current data
+            return CustomerDetails(**old_customer_details_dict)
 
-        updated_customer_details = customer_management.get_customer_by_id(customer_id)
+        success = customer_management.update_customer_info(
+            customer_id=current_user.customer_id,
+            conn=db_conn,
+            **update_data # Pass validated and filtered update_data
+        )
 
-        # Log the update using audit_service
-        # Note: `update_customer_info` doesn't return old values easily.
-        # A more robust audit would fetch customer before update, then log diff.
-        # For now, just logging that an update happened.
-        try:
-            from core.audit_service import log_customer_update # Assuming log_customer_update exists
-            # This is simplified; a real audit log would capture old and new values more precisely.
-            # The current `log_customer_update` in `audit_service.py` needs `changed_fields` and `old_values`.
-            # This would require fetching the customer state before the update.
-            # For this API subtask, we'll skip precise old/new value logging here to avoid overcomplicating the router.
-            # Ideally, the core `update_customer_info` function would return old/new values or handle auditing.
-            # A simpler audit log entry:
-            from core.audit_service import log_event
-            log_event(
-                action_type='CUSTOMER_API_UPDATE',
+        # `update_customer_info` raises error on failure or returns True.
+        # If it returned False (e.g. no fields changed, though we checked above), handle it.
+        # This part might be redundant if _data_actually_changed is comprehensive.
+        if not success :
+             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                 detail="Customer update failed or no actual changes were made by the service.")
+
+        updated_customer_details_dict = customer_management.get_customer_by_id(current_user.customer_id, conn=db_conn)
+
+        # Audit Log: Capture what changed
+        actual_changed_fields = {}
+        old_values_for_audit = {}
+        for key, new_value in update_data.items(): # Use update_data which has only sent fields
+            old_value = old_customer_details_dict.get(key)
+            # Ensure comparison handles type differences if any (e.g. Decimal vs float)
+            # For Pydantic models, data should be consistent.
+            if old_value != new_value:
+                actual_changed_fields[key] = new_value
+                old_values_for_audit[key] = old_value
+
+        if actual_changed_fields: # Only log if there were actual value changes
+            audit_service.log_event(
+                action_type='CUSTOMER_SELF_PROFILE_UPDATED', # More specific action type
                 target_entity='customers',
-                target_id=str(customer_id),
-                details={"updated_fields": list(update_data.keys())},
-                # user_id=current_user.get('user_id') # TODO: Use actual user ID
+                target_id=str(current_user.customer_id),
+                details={"changed_fields": actual_changed_fields, "old_values": old_values_for_audit},
+                user_id=current_user.user_id,
+                conn=db_conn
             )
-        except Exception as audit_e:
-            # Log this failure to log, but don't fail the main operation
-            print(f"Warning: Failed to log customer update event for customer {customer_id}: {audit_e}")
 
-        return CustomerDetails(**updated_customer_details)
+        db_conn.commit() # Commit customer update and audit log together
+        return CustomerDetails(**updated_customer_details_dict)
 
-    except CustomerNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except ValueError as ve: # Handles duplicate email from update_customer_info
+    except CustomerNotFoundError:
+        if db_conn and not db_conn.closed and not getattr(db_conn, 'autocommit', True): db_conn.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer profile not found.")
+    except ValueError as ve: # Handles duplicate email
+        if db_conn and not db_conn.closed and not getattr(db_conn, 'autocommit', True): db_conn.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(ve))
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {e}")
+        if db_conn and not db_conn.closed and not getattr(db_conn, 'autocommit', True): db_conn.rollback()
+        # Log e server-side
+        print(f"Error during /customers/me PUT: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred processing your profile update.")
 
-# Example of how to get customer by email (if needed, though REST typically uses ID for specific resources)
-# @router.get("/by-email/", response_model=CustomerDetails, summary="Get customer by email")
-# async def get_customer_by_email_endpoint(email: EmailStr, db_conn = Depends(get_db)):
-#     try:
-#         customer = customer_management.get_customer_by_email(email)
-#         return CustomerDetails(**customer)
-#     except CustomerNotFoundError as e:
-#         raise HTTPException(status_code=404, detail=str(e))
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
 
+# General /customers/{customer_id} GET and PUT endpoints are removed for v1 user-facing API.
+# Admin panel should be used for administrative access to arbitrary customer records.
+# If specific cross-user access is needed (e.g. a service accessing another user's customer data),
+# it would require its own specific authorization logic beyond user's own /me.
 ```

@@ -130,10 +130,112 @@ async def get_current_admin_user(request: Request, db_conn = Depends(get_db)): #
     #         raise HTTPException(...)
     # except UserNotFoundError:
     #     request.session.clear()
-    #     # User in session doesn't exist anymore
-    #     raise HTTPException(...)
+    #     # User in session doesn't exist anymore (e.g., deleted from DB after session created)
+    #     # This would be caught by the get_user_by_id call below.
+    #     request.session.clear() # Clear invalid session
+    #     raise credentials_exception # Re-raise as a general credentials issue forcing re-login
 
-    return {"user_id": user_id, "username": username, "role_name": role_name}
+    # Fetch full, current user details from DB to ensure data is up-to-date and user is still valid/active
+    try:
+        user_details_from_db = user_service.get_user_by_id(user_id, conn=db_conn) # Uses the passed db_conn
+        if not user_details_from_db["is_active"]:
+            request.session.clear() # Clear session for inactive user
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User account is inactive.",
+                headers={"Location": request.url_for("admin_login_form") + "?error_message=Account inactive."} # Custom header for redirect
+            )
+
+        # Ensure session role matches DB role (consistency check)
+        if user_details_from_db["role_name"] != role_name:
+            print(f"Warning: Session role '{role_name}' for user '{username}' mismatches DB role '{user_details_from_db['role_name']}'. Updating session.")
+            request.session["role_name"] = user_details_from_db["role_name"]
+            # This implies UserSchema should be populated from user_details_from_db
+
+        # Return as UserSchema compatible dict. UserSchema needs all these fields.
+        return UserSchema(**user_details_from_db) # Convert to UserSchema (or ensure dict is compatible)
+
+    except user_service.UserNotFoundError:
+        request.session.clear() # User in session no longer exists in DB
+        login_url = request.url_for("admin_login_form")
+        raise HTTPException(
+            status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+            detail="User not found in database, session cleared. Please log in again.",
+            headers={"Location": f"{login_url}?error_message=User not found, please log in again."}
+        )
+    except Exception as e_db: # Catch other DB errors during user fetch
+        print(f"Error fetching user details for session validation: {e_db}")
+        # Depending on policy, might clear session or just deny access for this request
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, # Or 500
+            detail="Error validating user session against database."
+        )
+
+
+# --- JWT / OAuth2 Dependencies for /api/v1 ---
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError # For specific exception type from python-jose
+from typing import List # Ensure List is imported for require_role
+
+# Assuming UserSchema and TokenData are defined in api.models
+from ..models import UserSchema, TokenData
+from core import user_service, security # For fetching user and decoding token
+from ..config import JWT_SECRET_KEY, JWT_ALGORITHM # Though decode_access_token uses this from security.py
+
+# This should match the path of your token issuing endpoint (login)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+async def get_current_active_user_from_token(
+    token: str = Depends(oauth2_scheme),
+    db_conn = Depends(get_db) # Reusing get_db for DB connection
+) -> UserSchema:
+    """
+    Dependency to get the current active user from a JWT token.
+    Used to protect /api/v1/... endpoints.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    malformed_token_exception = HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, # Or 401, depending on desired response for bad token structure
+        detail="Malformed token or invalid claims.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    try:
+        # decode_access_token expects credentials_exception to be an instance, not a type
+        # Let's pass the type and let it raise, or handle it here.
+        # The current decode_access_token raises the passed exception instance.
+        token_data = security.decode_access_token(token, credentials_exception=credentials_exception)
+        if token_data is None or token_data.username is None:
+            # This case should ideally be handled by decode_access_token raising the exception.
+            raise malformed_token_exception
+
+    except JWTError: # This can be raised by jwt.decode if token is expired or signature invalid
+        raise credentials_exception # Re-raise as the specific credentials exception
+    except Exception as e: # Catch any other error during token decoding, including Pydantic validation within decode
+        print(f"Unexpected error during token processing: {e}") # Log this
+        raise malformed_token_exception
+
+
+    # Fetch user from database based on username (subject of token)
+    user_dict = user_service.get_user_by_username(username=token_data.username, conn=db_conn)
+    if user_dict is None:
+        raise credentials_exception # User in token not found in DB
+
+    if not user_dict.get("is_active"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
+
+    # Convert dict to UserSchema Pydantic model for type safety and API consistency
+    # UserSchema does not include password_hash
+    try:
+        return UserSchema(**user_dict)
+    except ValidationError as e:
+        print(f"Error converting user dict to UserSchema: {e}") # Log this
+        # This indicates a mismatch between DB data and UserSchema, a server error
+        raise HTTPException(status_code=500, detail="Error processing user data.")
 
 
 # --- RBAC Dependency Factory ---

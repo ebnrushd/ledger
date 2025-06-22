@@ -491,6 +491,9 @@ def authenticate_user(username: str, password: str, conn=None) -> Optional[dict]
             # For now, if passed conn, last_login update might not be committed by this func.
             # A better pattern: auth returns user, router updates last_login. Or this func always uses new conn for auth.
             # For simplicity with current structure: if conn is passed, assume it's part of a larger tx that will commit.
+    # However, if conn is managed internally, commit is already done.
+    # If conn is passed, it's better if the caller commits after this (read + potential update) function.
+    # Let's ensure commit happens only if connection is internally managed for the last_login update.
 
             return user_data_for_auth
         else:
@@ -500,7 +503,52 @@ def authenticate_user(username: str, password: str, conn=None) -> Optional[dict]
     except Exception as e:
         print(f"Error during authentication for user {username}: {e}")
         # Do not expose detailed errors, just fail authentication
+        # Rollback if we managed connection and an error occurred before commit
+        if _conn_needs_managing and conn and not conn.closed and not getattr(conn, 'autocommit', True):
+            conn.rollback()
         return None
+    finally:
+        if _conn_needs_managing and conn and not conn.closed:
+            conn.close()
+
+def get_user_by_username(username: str, conn=None) -> Optional[dict]:
+    """
+    Retrieves a user by their username, joining with roles table for role_name.
+    This is similar to get_user_by_id but fetches by username.
+    Returns user details including hashed_password for internal use or None if not found.
+    """
+    query = """
+        SELECT u.user_id, u.username, u.email, u.role_id, r.role_name,
+               u.customer_id, u.is_active, u.created_at, u.last_login, u.password_hash
+        FROM users u
+        JOIN roles r ON u.role_id = r.role_id
+        WHERE u.username = %s;
+    """ # Assuming username is unique, otherwise add LIMIT 1 or handle multiple results
+
+    _conn_needs_managing = False
+    if conn is None:
+        conn = get_db_connection()
+        _conn_needs_managing = True
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(query, (username,))
+            record = cur.fetchone()
+
+        if not record:
+            # Not raising UserNotFoundError here, just returning None as per Optional[dict]
+            return None
+
+        return {
+            "user_id": record[0], "username": record[1], "email": record[2],
+            "role_id": record[3], "role_name": record[4], "customer_id": record[5],
+            "is_active": record[6], "created_at": record[7], "last_login": record[8],
+            "password_hash": record[9]
+        }
+    except Exception as e:
+        # Log this error
+        print(f"Error fetching user by username '{username}': {e}")
+        raise UserServiceError(f"Database error fetching user by username '{username}'.")
     finally:
         if _conn_needs_managing and conn and not conn.closed:
             conn.close()

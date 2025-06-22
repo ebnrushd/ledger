@@ -193,6 +193,7 @@ from .routers.api_admin import customers as api_admin_customers_router
 from .routers.api_admin import accounts as api_admin_accounts_router
 from .routers.api_admin import transactions as api_admin_transactions_router
 from .routers.api_admin import audit as api_admin_audit_router
+from .routers.api_admin import lookups as api_admin_lookups_router # New lookups router
 
 app.include_router(api_admin_dashboard_router.router)
 app.include_router(api_admin_users_router.router)
@@ -200,6 +201,7 @@ app.include_router(api_admin_customers_router.router)
 app.include_router(api_admin_accounts_router.router)
 app.include_router(api_admin_transactions_router.router)
 app.include_router(api_admin_audit_router.router)
+app.include_router(api_admin_lookups_router.router) # Add the lookups router
 
 
 @app.get("/", tags=["Root"], summary="Root path of the API")

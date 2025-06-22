@@ -5,18 +5,47 @@ from typing import Optional, List
 
 # Assuming uvicorn runs from project root
 from ....dependencies import get_db, get_current_admin_user, require_role
-from ....models import ( # Import JSON API specific models
+from ....models import (
     HttpError, UserSchema,
     AdminUserListResponse, AdminUserCreateRequest, AdminUserUpdateRequest, StatusResponse
 )
-from core import user_service, audit_service # For audit logging
+from core import user_service, audit_service
 from core.user_service import UserNotFoundError, UserAlreadyExistsError, UserServiceError
 
 router = APIRouter(
     prefix="/api/admin/users",
     tags=["Admin API - User Management"],
-    dependencies=[Depends(require_role(["admin"]))] # Only 'admin' role
+    dependencies=[Depends(require_role(["admin"]))]
 )
+
+@router.get("/me", response_model=UserSchema, summary="Get current authenticated admin user's details", name="get_current_admin_user_me_api")
+async def get_current_admin_user_me_api( # Renamed function
+    current_admin_user_data: dict = Depends(get_current_admin_user), # This returns basic session data for now
+    db_conn = Depends(get_db) # Add db_conn dependency here
+):
+    """
+    Retrieves the complete, up-to-date details for the currently authenticated admin user.
+    The `get_current_admin_user` dependency handles basic session validation.
+    This endpoint then fetches full details from the database.
+    """
+    if not current_admin_user_data or "user_id" not in current_admin_user_data:
+        # This case should ideally be caught by get_current_admin_user redirecting.
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated or user ID missing in session.")
+
+    try:
+        # Fetch full, current user details from the database using the user_id from session
+        user_details_from_db = user_service.get_user_by_id(current_admin_user_data["user_id"], conn=db_conn)
+        # get_user_by_id returns a dict compatible with UserSchema (includes role_name)
+        return UserSchema(**user_details_from_db)
+    except UserNotFoundError:
+        # Should not happen if session user_id is valid, but good to handle (e.g., user deleted after session created)
+        # In this case, clear session and force re-login.
+        # Forcing re-login from API endpoint is tricky. Client-side interceptor should handle 401.
+        # Here, we just signal that the user from session is not found in DB.
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User associated with session not found in database. Please re-login.")
+    except UserServiceError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error fetching user details: {str(e)}")
+
 
 @router.get("/", response_model=AdminUserListResponse)
 async def list_users_api(
@@ -31,8 +60,6 @@ async def list_users_api(
         users_data_dict = user_service.list_users(
             page=page, per_page=per_page, search_query=search_query, conn=db_conn
         )
-        # Convert user dicts to UserSchema if list_users doesn't already return Pydantic models
-        # Assuming list_users returns dicts that are compatible with UserSchema
         return AdminUserListResponse(
             users=[UserSchema(**user) for user in users_data_dict.get("users", [])],
             total_items=users_data_dict.get("total_users", 0),
@@ -48,7 +75,7 @@ async def list_users_api(
 
 @router.post("/", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
 async def create_user_api(
-    user_in: AdminUserCreateRequest, # Use Pydantic model for request body
+    user_in: AdminUserCreateRequest,
     current_admin: dict = Depends(get_current_admin_user),
     db_conn = Depends(get_db)
 ):
@@ -77,7 +104,7 @@ async def create_user_api(
     except UserAlreadyExistsError as e:
         if db_conn and not db_conn.closed and not getattr(db_conn, 'autocommit', True): db_conn.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
-    except (UserServiceError, Exception) as e: # Catch other service errors or unexpected
+    except (UserServiceError, Exception) as e:
         if db_conn and not db_conn.closed and not getattr(db_conn, 'autocommit', True): db_conn.rollback()
         print(f"Error creating user via API: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create user: {e}")
@@ -101,7 +128,7 @@ async def get_user_api(
 @router.put("/{user_id}", response_model=UserSchema)
 async def update_user_api(
     user_id: int,
-    user_in: AdminUserUpdateRequest, # Pydantic model for request body
+    user_in: AdminUserUpdateRequest,
     current_admin: dict = Depends(get_current_admin_user),
     db_conn = Depends(get_db)
 ):
@@ -110,27 +137,25 @@ async def update_user_api(
     update_data_dict = user_in.dict(exclude_unset=True)
 
     if not update_data_dict:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields provided for update.")
+        # Fetch current data and return if no update fields provided
+        try:
+            current_user_data = user_service.get_user_by_id(user_id, conn=db_conn)
+            return UserSchema(**current_user_data)
+        except UserNotFoundError:
+             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
-    # Password validation if present
     if "password" in update_data_dict and update_data_dict["password"] and len(update_data_dict["password"]) < 8 :
          raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Password must be at least 8 characters long if provided.")
 
     try:
-        # `update_user` service function already fetches current state for audit diff if needed
-        # and returns True/False.
         success = user_service.update_user(
             user_id=user_id,
             update_data=update_data_dict,
-            admin_user_id=admin_id_for_audit, # For potential internal use by service, though audit is done here
+            admin_user_id=admin_id_for_audit,
             conn=db_conn
         )
 
         if success:
-            # Audit log for the update
-            # For JSON API, it's good practice for update_user to return the changed fields for audit details
-            # The current user_service.update_user builds an audit diff but doesn't return it.
-            # For now, logging the payload that was sent for update.
             audit_details = {k: v for k, v in update_data_dict.items() if k != "password"}
             if "password" in update_data_dict and update_data_dict["password"]:
                 audit_details["password_changed"] = True
@@ -140,16 +165,12 @@ async def update_user_api(
                 details=audit_details, user_id=admin_id_for_audit, conn=db_conn
             )
             db_conn.commit()
-        elif not update_data_dict : # If exclude_unset made it empty, or service determined no change
-             # This case should be caught by the check above. If service returns False, means no data changed.
-             # No need to commit or log audit if no change.
-             pass
-
+        # If success is False (no actual change), no audit, no commit needed beyond what service did.
 
         updated_user_data = user_service.get_user_by_id(user_id, conn=db_conn)
         return UserSchema(**updated_user_data)
 
-    except UserNotFoundError:
+    except UserNotFoundError: # Raised by update_user if initial fetch fails
         if db_conn and not db_conn.closed and not getattr(db_conn, 'autocommit', True): db_conn.rollback()
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found for update.")
     except UserAlreadyExistsError as e:
@@ -158,8 +179,6 @@ async def update_user_api(
     except (UserServiceError, Exception) as e:
         if db_conn and not db_conn.closed and not getattr(db_conn, 'autocommit', True): db_conn.rollback()
         print(f"Error updating user via API: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update user: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update user.")
 
-# No DELETE endpoint for users for now, usually involves soft delete (is_active=False)
-# which is handled by PUT /admin/api/users/{user_id} with AdminUserUpdateRequest.
 ```

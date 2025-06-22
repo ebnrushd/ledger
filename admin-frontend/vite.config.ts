@@ -1,10 +1,7 @@
-import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
-
 /// <reference types="vitest" />
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import path from 'path' // Import path module for resolving aliases
+import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -16,10 +13,10 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    environment: 'happy-dom', // or 'jsdom'
-    setupFiles: ['./tests/setup.ts'], // Optional setup file for global test configurations
+    environment: 'happy-dom',
+    // setupFiles: ['./tests/setup.ts'], // Optional setup file for tests
     coverage: {
-      provider: 'istanbul', // or 'v8'
+      provider: 'istanbul',
       reporter: ['text', 'json', 'html'],
     },
   },

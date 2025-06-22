@@ -130,10 +130,46 @@ async def get_current_admin_user(request: Request, db_conn = Depends(get_db)): #
     #         raise HTTPException(...)
     # except UserNotFoundError:
     #     request.session.clear()
-    #     # User in session doesn't exist anymore
-    #     raise HTTPException(...)
+    #     # User in session doesn't exist anymore (e.g., deleted from DB after session created)
+    #     # This would be caught by the get_user_by_id call below.
+    #     request.session.clear() # Clear invalid session
+    #     raise credentials_exception # Re-raise as a general credentials issue forcing re-login
 
-    return {"user_id": user_id, "username": username, "role_name": role_name}
+    # Fetch full, current user details from DB to ensure data is up-to-date and user is still valid/active
+    try:
+        user_details_from_db = user_service.get_user_by_id(user_id, conn=db_conn) # Uses the passed db_conn
+        if not user_details_from_db["is_active"]:
+            request.session.clear() # Clear session for inactive user
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User account is inactive.",
+                headers={"Location": request.url_for("admin_login_form") + "?error_message=Account inactive."} # Custom header for redirect
+            )
+
+        # Ensure session role matches DB role (consistency check)
+        if user_details_from_db["role_name"] != role_name:
+            print(f"Warning: Session role '{role_name}' for user '{username}' mismatches DB role '{user_details_from_db['role_name']}'. Updating session.")
+            request.session["role_name"] = user_details_from_db["role_name"]
+            # This implies UserSchema should be populated from user_details_from_db
+
+        # Return as UserSchema compatible dict. UserSchema needs all these fields.
+        return UserSchema(**user_details_from_db) # Convert to UserSchema (or ensure dict is compatible)
+
+    except user_service.UserNotFoundError:
+        request.session.clear() # User in session no longer exists in DB
+        login_url = request.url_for("admin_login_form")
+        raise HTTPException(
+            status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+            detail="User not found in database, session cleared. Please log in again.",
+            headers={"Location": f"{login_url}?error_message=User not found, please log in again."}
+        )
+    except Exception as e_db: # Catch other DB errors during user fetch
+        print(f"Error fetching user details for session validation: {e_db}")
+        # Depending on policy, might clear session or just deny access for this request
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, # Or 500
+            detail="Error validating user session against database."
+        )
 
 
 # --- JWT / OAuth2 Dependencies for /api/v1 ---

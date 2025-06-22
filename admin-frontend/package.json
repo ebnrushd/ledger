@@ -1,5 +1,5 @@
 {
-  "name": "customer-frontend",
+  "name": "admin-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,17 +7,13 @@
     "dev": "vite",
     "build": "vue-tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest",
-    "test:unit": "vitest run",
-    "test:unit:watch": "vitest",
-    "coverage": "vitest run --coverage"
+    "test": "vitest"
   },
   "dependencies": {
     "vue": "^3.3.4",
     "vue-router": "^4.2.4",
     "pinia": "^2.1.6",
-    "axios": "^1.4.0",
-    "jwt-decode": "^3.1.2"
+    "axios": "^1.4.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^4.2.3",

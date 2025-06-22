@@ -3,16 +3,21 @@ import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 // View Components (lazy-loaded)
 const AdminLoginView = () => import('@/views/AdminLoginView.vue');
 const AdminDashboardView = () => import('@/views/AdminDashboardView.vue');
-const UserListView = () => import('@/views/UserListView.vue');
-const AccountListView = () => import('@/views/AccountListView.vue');
-const TransactionListView = () => import('@/views/TransactionListView.vue');
-const AuditLogListView = () => import('@/views/AuditLogListView.vue');
 
+const UserListView = () => import('@/views/UserListView.vue');
 const UserFormView = () => import('@/views/UserFormView.vue');
 const UserDetailView = () => import('@/views/UserDetailView.vue');
-const CustomerDetailView = () => import('@/views/CustomerDetailView.vue'); // Placeholder
-const AccountDetailView = () => import('@/views/AccountDetailView.vue');   // Placeholder
-const TransactionDetailView = () => import('@/views/TransactionDetailView.vue'); // Placeholder
+
+const CustomerListView = () => import('@/views/CustomerListView.vue');
+const CustomerDetailView = () => import('@/views/CustomerDetailView.vue');
+
+const AccountListView = () => import('@/views/AccountListView.vue');
+const AccountDetailView = () => import('@/views/AccountDetailView.vue');
+
+const TransactionListView = () => import('@/views/TransactionListView.vue');
+const TransactionDetailView = () => import('@/views/TransactionDetailView.vue');
+
+const AuditLogListView = () => import('@/views/AuditLogListView.vue');
 
 const NotFoundView = () => import('@/views/NotFoundView.vue');
 
@@ -21,7 +26,7 @@ const routes: Array<RouteRecordRaw> = [
     path: '/login',
     name: 'AdminLogin',
     component: AdminLoginView,
-    meta: { layout: 'AdminAuthLayout', title: 'Admin Login' },
+    meta: { layout: 'AdminAuthLayout', title: 'Admin Login', requiresAuth: false },
   },
   {
     path: '/',
@@ -49,17 +54,31 @@ const routes: Array<RouteRecordRaw> = [
   },
   {
     path: '/users/:userId/view',
-    name: 'AdminUserDetail', // Name used by UserListView for View link
+    name: 'AdminUserDetail',
     component: UserDetailView,
     props: true,
     meta: { layout: 'AdminLayout', requiresAuth: true, title: 'User Details' },
   },
   {
     path: '/users/:userId/edit',
-    name: 'AdminUserEdit',  // Name used by UserListView for Edit link
+    name: 'AdminUserEdit',
     component: UserFormView,
     props: true,
     meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Edit User' },
+  },
+  // Customer Management
+  {
+    path: '/customers',
+    name: 'AdminCustomerList',
+    component: CustomerListView,
+    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Customer Management'},
+  },
+  {
+    path: '/customers/:customerId/view',
+    name: 'AdminCustomerDetail',
+    component: CustomerDetailView,
+    props: true,
+    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Customer Details' },
   },
   // Account Management
   {
@@ -75,20 +94,6 @@ const routes: Array<RouteRecordRaw> = [
     props: true,
     meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Account Details' },
   },
-  // Customer Management (Admin view)
-  {
-    path: '/customers', // New route for customer list
-    name: 'AdminCustomerList',
-    component: () => import('@/views/CustomerListView.vue'),
-    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Customer Management'},
-  },
-  {
-    path: '/customers/:customerId/view',
-    name: 'AdminCustomerDetail',
-    component: CustomerDetailView,
-    props: true,
-    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Customer Details' },
-  },
   // Transaction Monitoring
   {
     path: '/transactions',
@@ -97,8 +102,8 @@ const routes: Array<RouteRecordRaw> = [
     meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Transaction Monitoring' },
   },
   {
-    path: '/transactions/:transactionId/view', // Changed to /view
-    name: 'AdminTransactionDetail', // Name used by TransactionListView
+    path: '/transactions/:transactionId/view',
+    name: 'AdminTransactionDetail',
     component: TransactionDetailView,
     props: true,
     meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Transaction Details' },
@@ -116,12 +121,12 @@ const routes: Array<RouteRecordRaw> = [
     path: '/:pathMatch(.*)*',
     name: 'AdminNotFound',
     component: NotFoundView,
-    meta: { layout: 'AdminLayout', title: 'Page Not Found' },
+    meta: { layout: 'AdminLayout', title: 'Page Not Found' }, // Or a SimpleLayout
   }
 ];
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL || '/admin/'), // Adjusted base for admin panel
+  history: createWebHistory(import.meta.env.BASE_URL || '/admin/'), // Base for admin panel
   routes,
 });
 
@@ -134,13 +139,13 @@ router.beforeEach((to, from, next) => {
 
   if (requiresAuth && !isAuthenticated) {
     if (to.name !== 'AdminLogin') {
-        console.log(`Router Guard: Not authenticated for "${String(to.name)}", redirecting to Login.`);
+        console.log(`Admin Router Guard: Not authenticated for "${String(to.name)}", redirecting to Login.`);
         next({ name: 'AdminLogin', query: { redirect: to.fullPath } });
     } else {
         next();
     }
   } else if (to.name === 'AdminLogin' && isAuthenticated) {
-    console.log(`Router Guard: Authenticated, redirecting from Login to Dashboard.`);
+    console.log(`Admin Router Guard: Authenticated, redirecting from Login to Dashboard.`);
     next({ name: 'AdminDashboard' });
   } else {
     next();

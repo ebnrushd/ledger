@@ -1,9 +1,9 @@
 import { createApp } from 'vue'
 import App from './App.vue'
-import router from './router' // Import router
-import pinia from './store'  // Import Pinia instance
+import router from './modules/customer/router' // Updated path
+import pinia from './modules/customer/store'  // Updated path
 // import './assets/main.css'  // Remove old global styles
-import './assets/css/tailwind.css' // Import Tailwind CSS
+import './modules/customer/assets/css/tailwind.css' // Updated path
 
 const app = createApp(App)
 

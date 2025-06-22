@@ -8,58 +8,36 @@
 import { defineComponent, computed, shallowRef, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
-// Import layout components
-import DefaultLayout from './layouts/DefaultLayout.vue';
-import AuthLayout from './layouts/AuthLayout.vue';
-// Import other layouts if you have them, e.g., AdminLayout
+// Import layout components using new paths
+// These will be refactored later when main router combines admin/customer layouts
+const CustomerDefaultLayout = defineAsyncComponent(() => import('./modules/customer/layouts/DefaultLayout.vue'));
+const CustomerAuthLayout = defineAsyncComponent(() => import('./modules/customer/layouts/AuthLayout.vue'));
+// Placeholder for a potential shared "SimpleLayout" or future Admin layouts
+// const SimpleLayout = defineAsyncComponent(() => import('./shared/layouts/SimpleLayout.vue'));
 
 export default defineComponent({
   name: 'App',
-  components: {
-    DefaultLayout,
-    AuthLayout,
-    // Register other layouts here
-  },
+  // No need to register components here if using defineAsyncComponent in setup directly for currentLayoutComponent
   setup() {
     const route = useRoute();
 
-    // shallowRef is used for performance if layouts are complex,
-    // as it only makes the .value reactive, not the object itself.
-    const currentLayout = shallowRef(DefaultLayout); // Default to DefaultLayout
+    const layouts: Record<string, any> = {
+      DefaultLayout: CustomerDefaultLayout, // Map generic name to specific customer layout
+      AuthLayout: CustomerAuthLayout,
+      // SimpleLayout: SimpleLayout,
+    };
 
-    // Watch for route changes to update the layout
-    watch(
-      () => route.meta,
-      async (meta) => {
-        try {
-          if (meta.layout && typeof meta.layout === 'string') {
-            // Dynamically import the layout component
-            // Note: For this to work well with Vite's build, often explicit imports are better,
-            // or ensure Vite knows about these dynamic paths.
-            // For simplicity here, we'll use a map or direct component check.
-            if (meta.layout === 'AuthLayout') {
-              currentLayout.value = AuthLayout;
-            } else if (meta.layout === 'DefaultLayout') {
-              currentLayout.value = DefaultLayout;
-            } else {
-              // Fallback to DefaultLayout if specified layout is unknown
-              console.warn(`Unknown layout: ${meta.layout}, defaulting to DefaultLayout.`);
-              currentLayout.value = DefaultLayout;
-            }
-          } else {
-            // No layout specified in meta, use default
-            currentLayout.value = DefaultLayout;
-          }
-        } catch (e) {
-          console.error('Failed to load layout:', meta.layout, e);
-          currentLayout.value = DefaultLayout; // Fallback on error
-        }
-      },
-      { immediate: true } // immediate: true to run the watcher on initial load
-    );
+    const currentLayoutComponent = computed(() => {
+      const layoutName = route.meta.layout as string;
+      // Fallback to CustomerDefaultLayout if no layout specified or name is unknown
+      return layouts[layoutName] || CustomerDefaultLayout;
+    });
+
+    // Watch for route changes is implicitly handled by computed property reacting to route.meta
+    // No explicit watch needed here anymore if currentLayoutComponent is a computed property.
 
     return {
-      currentLayout,
+      currentLayoutComponent,
     };
   },
 });

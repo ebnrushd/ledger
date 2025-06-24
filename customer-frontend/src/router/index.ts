@@ -1,109 +1,96 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
+import customerRoutes from '@customer/router'; // Default export from refactored customer router
+import adminRoutes from '@admin/router';     // Default export from refactored admin router
 
-// Layouts
-// It's common to import layouts here if routes define them,
-// or App.vue can handle layout switching based on route meta.
-// For this setup, we'll assume App.vue handles layout switching using route meta fields.
-// import DefaultLayout from '@/layouts/DefaultLayout.vue';
-// import AuthLayout from '@/layouts/AuthLayout.vue';
+// Import auth stores for the global navigation guard
+import { useAuthStore as useCustomerAuthStore } from '@customer/store/auth';
+import { useAdminAuthStore } from '@admin/store/adminAuth';
 
-// View Components
-import HomeView from '@/views/HomeView.vue';
-import LoginView from '@/views/LoginView.vue';
-import RegisterView from '@/views/RegisterView.vue';
-import DashboardView from '@/views/DashboardView.vue';
-// Placeholder for a protected route example
-// import ProfileView from '@/views/ProfileView.vue';
+// New AppShell for admin routes
+import AppShellAdmin from '@/AppShellAdmin.vue'; // Assuming AppShellAdmin is in src/
 
 const routes: Array<RouteRecordRaw> = [
+  ...customerRoutes,
   {
-    path: '/',
-    name: 'Home',
-    component: HomeView,
-    meta: { layout: 'DefaultLayout' }, // Custom meta field for layout
+    path: '/admin',
+    component: AppShellAdmin, // Parent component for all /admin routes
+    redirect: '/admin/dashboard', // Redirect /admin to /admin/dashboard
+    children: [
+      ...adminRoutes // Admin routes are now children, paths should be relative to /admin
+    ]
   },
+  // A global catch-all 404, preferably using a layout that fits a generic not-found page
   {
-    path: '/login',
-    name: 'Login',
-    component: LoginView,
-    meta: { layout: 'AuthLayout' },
-  },
-  {
-    path: '/register',
-    name: 'Register',
-    component: RegisterView,
-    meta: { layout: 'AuthLayout' },
-  },
-  {
-    path: '/dashboard',
-    name: 'Dashboard',
-    component: DashboardView,
-    meta: { layout: 'DefaultLayout', requiresAuth: true }, // Example: requiresAuth for protected routes
-  },
-  // Example of another protected route:
-  // {
-  //   path: '/profile',
-  //   name: 'Profile',
-  //   component: ProfileView,
-  //   meta: { layout: 'DefaultLayout', requiresAuth: true },
-  // },
-  {
-    path: '/:pathMatch(.*)*', // Catch-all route for 404
-    name: 'NotFound',
-    component: () => import('@/views/NotFoundView.vue'), // Lazy load 404 page
-    meta: { layout: 'DefaultLayout' },
-  },
-  {
-    path: '/accounts/:accountId', // Using accountId to match common param naming
-    name: 'AccountDetails',
-    component: () => import('@/views/AccountDetailsView.vue'), // To be created
-    meta: { layout: 'DefaultLayout', requiresAuth: true },
-    props: true // Pass route params (like accountId) as props to the component
-  },
-  {
-    path: '/transfer',
-    name: 'TransferFunds',
-    component: () => import('@/views/TransferFundsView.vue'),
-    meta: { layout: 'DefaultLayout', requiresAuth: true },
-  },
-  {
-    path: '/profile',
-    name: 'UserProfile',
-    component: () => import('@/views/ProfileView.vue'),
-    meta: { requiresAuth: true, layout: 'DefaultLayout' }
+    path: '/:pathMatch(.*)*',
+    name: 'GlobalNotFound',
+    component: () => import('@customer/views/NotFoundView.vue'), // Default to customer's NotFound for now
+    meta: { layout: 'CustomerAuthLayout' } // Or a new 'SimpleLayout' or 'ErrorLayout'
   }
 ];
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL || '/'), // BASE_URL for subfolder deployment
+  history: createWebHistory(import.meta.env.BASE_URL || '/'),
   routes,
 });
 
-// Optional: Navigation Guards (for authentication)
-// This guard should be placed AFTER router initialization and BEFORE exporting the router.
-// It also needs access to the auth store.
-import { useAuthStore } from '@/store/auth'; // Import store
-// Pinia instance needs to be passed to the store hook if used outside setup() context,
-// OR ensure Pinia is initialized before router setup if store is instantiated here.
-// For simplicity, assume Pinia is initialized (in main.ts) and store can be used.
+router.beforeEach(async (to, from, next) => {
+  // Ensure Pinia stores are accessible. They should be initialized by main.ts by this point.
+  // Ensure Pinia stores are accessible. They should be initialized by main.ts by this point.
+  const customerAuthStore = useCustomerAuthStore();
+  const adminAuthStore = useAdminAuthStore();
 
-router.beforeEach((to, from, next) => {
-  // It's better to initialize the store usage inside the guard,
-  // as Pinia might not be fully available when this module is first imported.
-  const authStore = useAuthStore(); // Get store instance
+  const requiresAuth = to.meta.requiresAuth;
+  // Check meta field for admin routes, which is more reliable than path matching for nested routes
+  const isAdminRoute = to.matched.some(record => record.meta.isAdminRoute === true);
 
-  const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
-  const isAuthenticated = authStore.isUserAuthenticated; // Use getter
+  // Debugging logs
+  // console.log(`Navigating to: ${to.path}, name: ${String(to.name)}`);
+  // console.log(`Is admin route: ${isAdminRoute}`);
+  // console.log(`Requires auth: ${requiresAuth}`);
+  // console.log(`Customer Authenticated: ${customerAuthStore.isUserAuthenticated}`);
+  // console.log(`Admin Authenticated: ${adminAuthStore.isUserAdminAuthenticated}`);
 
-  if (requiresAuth && !isAuthenticated) {
-    console.log(`Navigation blocked to "${String(to.name)}" (requires auth), redirecting to Login.`);
-    next({ name: 'Login', query: { redirect: to.fullPath } });
-  } else if ((to.name === 'Login' || to.name === 'Register') && isAuthenticated) {
-    console.log(`User is authenticated, redirecting from "${String(to.name)}" to Dashboard.`);
-    next({ name: 'Dashboard' });
-  } else {
-    next();
+
+  if (isAdminRoute) {
+    // Handle /admin/login route specifically
+    if (to.name === 'AdminLogin') {
+      if (adminAuthStore.isUserAdminAuthenticated) {
+        // console.log('Admin already authenticated, redirecting from AdminLogin to AdminDashboard.');
+        return next({ name: 'AdminDashboard' });
+      } else {
+        // console.log('Proceeding to AdminLogin.');
+        return next(); // Allow access to login page if not authenticated
+      }
+    }
+
+    // For all other admin routes that require auth
+    if (requiresAuth) {
+      if (!adminAuthStore.isUserAdminAuthenticated) {
+        // console.log('Admin not authenticated, attempting to check session.');
+        // await adminAuthStore.checkAuthStatus(); // Ensure session status is checked.
+        // This checkAuthStatus is problematic here if it causes redirect loops or if it's slow.
+        // The main.ts already attempts this. If still not authenticated, redirect.
+        if (!adminAuthStore.isUserAdminAuthenticated) {
+          // console.log('Admin still not authenticated after check, redirecting to AdminLogin.');
+          return next({ name: 'AdminLogin', query: { redirect: to.fullPath } });
+        }
+      }
+    }
+  } else { // Customer routes
+    if ((to.name === 'Login' || to.name === 'Register') && customerAuthStore.isUserAuthenticated) {
+      // console.log('Customer authenticated, redirecting from Login/Register to Dashboard.');
+      return next({ name: 'Dashboard' });
+    }
+    if (requiresAuth && !customerAuthStore.isUserAuthenticated) {
+      // console.log('Customer not authenticated, redirecting to Login.');
+      // Customer's tryAutoLogin is also called from main.ts.
+      // If still not authenticated, redirect.
+      return next({ name: 'Login', query: { redirect: to.fullPath } });
+    }
   }
+
+  // console.log('Proceeding with navigation.');
+  next();
 });
 
 export default router;

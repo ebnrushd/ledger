@@ -1,62 +1,54 @@
 <template>
-  <component :is="currentLayout">
-    <router-view />
-  </component>
+  <component :is="currentLayout" />
 </template>
 
 <script lang="ts">
-import { defineComponent, computed, shallowRef, watch } from 'vue';
+import { defineComponent, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 
-// Import layout components
-import DefaultLayout from './layouts/DefaultLayout.vue';
-import AuthLayout from './layouts/AuthLayout.vue';
-// Import other layouts if you have them, e.g., AdminLayout
+// Import all possible layouts
+import CustomerDefaultLayout from '@customer/layouts/DefaultLayout.vue';
+import CustomerAuthLayout from '@customer/layouts/AuthLayout.vue';
+import AdminLayout from '@admin/layouts/AdminLayout.vue';
+import AdminAuthLayout from '@admin/layouts/AdminAuthLayout.vue';
+import SimpleLayout from '@/layouts/SimpleLayout.vue'; // New basic layout
+
+// Import auth stores for initialization
+import { useAuthStore as useCustomerAuthStore } from '@customer/store/auth';
+import { useAdminAuthStore } from '@admin/store/adminAuth';
 
 export default defineComponent({
   name: 'App',
-  components: {
-    DefaultLayout,
-    AuthLayout,
-    // Register other layouts here
-  },
   setup() {
     const route = useRoute();
 
-    // shallowRef is used for performance if layouts are complex,
-    // as it only makes the .value reactive, not the object itself.
-    const currentLayout = shallowRef(DefaultLayout); // Default to DefaultLayout
+    const layouts: Record<string, any> = {
+      CustomerDefaultLayout,
+      CustomerAuthLayout,
+      AdminLayout,
+      AdminAuthLayout,
+      SimpleLayout,
+    };
 
-    // Watch for route changes to update the layout
-    watch(
-      () => route.meta,
-      async (meta) => {
-        try {
-          if (meta.layout && typeof meta.layout === 'string') {
-            // Dynamically import the layout component
-            // Note: For this to work well with Vite's build, often explicit imports are better,
-            // or ensure Vite knows about these dynamic paths.
-            // For simplicity here, we'll use a map or direct component check.
-            if (meta.layout === 'AuthLayout') {
-              currentLayout.value = AuthLayout;
-            } else if (meta.layout === 'DefaultLayout') {
-              currentLayout.value = DefaultLayout;
-            } else {
-              // Fallback to DefaultLayout if specified layout is unknown
-              console.warn(`Unknown layout: ${meta.layout}, defaulting to DefaultLayout.`);
-              currentLayout.value = DefaultLayout;
-            }
-          } else {
-            // No layout specified in meta, use default
-            currentLayout.value = DefaultLayout;
-          }
-        } catch (e) {
-          console.error('Failed to load layout:', meta.layout, e);
-          currentLayout.value = DefaultLayout; // Fallback on error
-        }
-      },
-      { immediate: true } // immediate: true to run the watcher on initial load
-    );
+    const currentLayout = computed(() => {
+      const layoutName = route.meta.layout as string | undefined;
+      return layouts[layoutName || 'SimpleLayout'] || SimpleLayout; // Fallback to SimpleLayout
+    });
+
+    onMounted(async () => {
+      const customerAuthStore = useCustomerAuthStore();
+      const adminAuthStore = useAdminAuthStore();
+
+      // These checks are also in main.ts but running them here ensures they are re-checked
+      // if the app is rehydrated or if main.ts execution timing is nuanced.
+      // The stores themselves should prevent redundant API calls if already checked.
+      if (!customerAuthStore.isUserAuthenticated) { // Corrected getter name
+        await customerAuthStore.tryAutoLogin();
+      }
+      if (!adminAuthStore.isUserAdminAuthenticated) { // Corrected getter name
+        await adminAuthStore.checkAuthStatus();
+      }
+    });
 
     return {
       currentLayout,
@@ -66,14 +58,12 @@ export default defineComponent({
 </script>
 
 <style>
-/* App.vue specific styles or global styles not in main.css */
-/* For example, ensuring the app takes full height if layouts need it */
-html, body {
+/* Global styles can remain if truly global, or be moved to ./assets/css/tailwind.css */
+/* Ensure html, body, and #app take full height for layouts that need it. */
+html, body, #app {
   height: 100%;
   margin: 0;
-}
-#app {
-  /* display: flex; flex-direction: column; min-height: 100vh; */ /* Already in main.css */
+  /* background-color: #f0f2f5; /* Example global background */
 }
 </style>
 ```

@@ -7,9 +7,12 @@ from ....dependencies import get_db # Standard DB dependency
 from ....models import TokenResponse, UserCreateAPI, UserSchema, HttpError # API Models
 from ....config import DEFAULT_CUSTOMER_ROLE_NAME, ACCESS_TOKEN_EXPIRE_DELTA
 
-from core import user_service, customer_management, security # Core services
+from core import user_service, customer_management, security, account_management # Core services
 from core.user_service import UserAlreadyExistsError, UserServiceError
 from core.customer_management import CustomerNotFoundError # Should not happen if creating alongside user
+from core.account_management import get_account_status_id as get_status_id_by_name # For initial account status
+from core.account_management import open_account as open_initial_account # For initial account
+from decimal import Decimal # For initial balance
 
 router = APIRouter(
     prefix="/api/v1/auth", # Prefix for all routes in this router
@@ -129,7 +132,25 @@ async def register_user(
         with db_conn.cursor() as cur_link:
             cur_link.execute("UPDATE users SET customer_id = %s WHERE user_id = %s;", (new_customer_id, new_user_id))
 
-        db_conn.commit() # Commit the transaction for user, customer, and link
+        # 5. Create a default 'savings' account in 'pending_approval' state
+        try:
+            pending_approval_status_id = get_status_id_by_name('pending_approval', conn=db_conn)
+            # You might want to make account type, initial balance, currency configurable or based on user_in
+            open_initial_account(
+                customer_id=new_customer_id,
+                account_type='savings', # Default to savings
+                initial_balance=Decimal("0.00"), # Default initial balance
+                currency='USD', # Default currency
+                conn=db_conn,
+                initial_status_id=pending_approval_status_id
+            )
+        except Exception as e_acc:
+            # If account opening fails, we should ideally roll back user/customer creation
+            if db_conn and not db_conn.closed and not getattr(db_conn, 'autocommit', True): db_conn.rollback()
+            print(f"Failed to open initial account during registration: {e_acc}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error creating initial account for user.")
+
+        db_conn.commit() # Commit the transaction for user, customer, link, and initial account
 
     except UserAlreadyExistsError as e:
         if db_conn and not db_conn.closed and not getattr(db_conn, 'autocommit', True): db_conn.rollback()

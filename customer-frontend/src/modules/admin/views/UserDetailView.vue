@@ -79,7 +79,7 @@
 <script lang="ts">
 import { defineComponent, ref, onMounted, computed, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router'; // Or use props
-import { useAdminUsersStore } from '@/store/adminUsers';
+import { useAdminUsersStore } from '@admin/store/adminUsers';
 import { storeToRefs } from 'pinia';
 
 export default defineComponent({

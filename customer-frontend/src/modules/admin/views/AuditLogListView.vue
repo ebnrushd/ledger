@@ -107,9 +107,9 @@
 
 <script lang="ts">
 import { defineComponent, onMounted, reactive, watch, ref } from 'vue';
-import { useAdminAuditLogsStore } from '@/store/adminAuditLogs';
+import { useAdminAuditLogsStore } from '@admin/store/adminAuditLogs';
 import { useRouter, useRoute } from 'vue-router';
-import type { AuditLogFilters } from '@/types/auditLog';
+import type { AuditLogFilters } from '@admin/types/auditLog';
 
 export default defineComponent({
   name: 'AuditLogListView',

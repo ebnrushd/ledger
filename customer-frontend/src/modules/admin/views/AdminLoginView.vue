@@ -26,7 +26,7 @@
 <script lang="ts">
 import { defineComponent, ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { useAdminAuthStore } from '@/store/adminAuth'; // Use the new admin auth store
+import { useAdminAuthStore } from '@admin/store/adminAuth'; // Use the new admin auth store
 
 export default defineComponent({
   name: 'AdminLoginView',

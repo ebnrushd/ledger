@@ -102,8 +102,8 @@
 <script lang="ts">
 import { defineComponent, ref, onMounted, computed, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useAdminUsersStore } from '@/store/adminUsers';
-import type { AdminUserCreatePayload, AdminUserUpdatePayload, AdminUser as UserSchema } from '@/types/adminUser'; // Corrected import
+import { useAdminUsersStore } from '@admin/store/adminUsers';
+import type { AdminUserCreatePayload, AdminUserUpdatePayload, AdminUser as UserSchema } from '@admin/types/adminUser'; // Corrected import
 
 export default defineComponent({
   name: 'UserFormView',

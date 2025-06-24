@@ -69,7 +69,7 @@ export const useAdminAccountsStore = defineStore('adminAccounts', () => {
     }
   }
 
-  async function updateAccountStatus(accountId: string | number, statusName: string): Promise<boolean> {
+  async function updateAccountStatus(accountId: string | number, statusName: string, refreshListCallback: (() => Promise<void>) | null = null): Promise<boolean> {
     isUpdatingStatus.value = true;
     updateError.value = null;
     successMessage.value = null;
@@ -78,7 +78,13 @@ export const useAdminAccountsStore = defineStore('adminAccounts', () => {
       selectedAccount.value = updatedAccount; // Update details if viewing this account
       // Refresh list if current view is list, or find and update in list
       const index = accounts.value.findIndex(acc => acc.account_id === updatedAccount.account_id);
-      if (index !== -1) accounts.value[index] = updatedAccount;
+      // If a refresh callback is provided (likely from a list view), use it.
+      // Otherwise, just update the item in the current list if present.
+      if (refreshListCallback) {
+        await refreshListCallback();
+      } else if (index !== -1) {
+        accounts.value[index] = updatedAccount;
+      }
 
       successMessage.value = `Account ${updatedAccount.account_number} status updated to ${statusName}.`;
       return true;

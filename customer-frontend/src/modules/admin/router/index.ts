@@ -1,156 +1,119 @@
-import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
+import { RouteRecordRaw } from 'vue-router';
 
 // View Components (lazy-loaded)
 const AdminLoginView = () => import('@admin/views/AdminLoginView.vue');
 const AdminDashboardView = () => import('@admin/views/AdminDashboardView.vue');
-
 const UserListView = () => import('@admin/views/UserListView.vue');
 const UserFormView = () => import('@admin/views/UserFormView.vue');
 const UserDetailView = () => import('@admin/views/UserDetailView.vue');
-
 const CustomerListView = () => import('@admin/views/CustomerListView.vue');
 const CustomerDetailView = () => import('@admin/views/CustomerDetailView.vue');
-
 const AccountListView = () => import('@admin/views/AccountListView.vue');
 const AccountDetailView = () => import('@admin/views/AccountDetailView.vue');
-
 const TransactionListView = () => import('@admin/views/TransactionListView.vue');
 const TransactionDetailView = () => import('@admin/views/TransactionDetailView.vue');
-
 const AuditLogListView = () => import('@admin/views/AuditLogListView.vue');
+const AdminNotFoundView = () => import('@admin/views/NotFoundView.vue'); // Admin specific 404
 
-const NotFoundView = () => import('@admin/views/NotFoundView.vue');
-
-const routes: Array<RouteRecordRaw> = [
+const adminRoutes: Array<RouteRecordRaw> = [
   {
-    path: '/login',
+    path: 'login', // Relative to /admin
     name: 'AdminLogin',
     component: AdminLoginView,
-    meta: { layout: 'AdminAuthLayout', title: 'Admin Login', requiresAuth: false },
+    meta: { layout: 'AdminAuthLayout', title: 'Admin Login', requiresAuth: false, isAdminRoute: true },
   },
   {
-    path: '/',
-    redirect: '/dashboard',
-    meta: { requiresAuth: true },
-  },
-  {
-    path: '/dashboard',
+    path: 'dashboard', // Relative to /admin
     name: 'AdminDashboard',
     component: AdminDashboardView,
-    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Dashboard' },
+    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Dashboard', isAdminRoute: true },
   },
-  // User Management
   {
-    path: '/users',
+    path: 'users',
     name: 'AdminUserList',
     component: UserListView,
-    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'User Management' },
+    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'User Management', isAdminRoute: true },
   },
   {
-    path: '/users/new',
+    path: 'users/new',
     name: 'AdminUserCreate',
     component: UserFormView,
-    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Create User' },
+    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Create User', isAdminRoute: true },
   },
   {
-    path: '/users/:userId/view',
+    path: 'users/:userId/view',
     name: 'AdminUserDetail',
     component: UserDetailView,
     props: true,
-    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'User Details' },
+    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'User Details', isAdminRoute: true },
   },
   {
-    path: '/users/:userId/edit',
+    path: 'users/:userId/edit',
     name: 'AdminUserEdit',
     component: UserFormView,
     props: true,
-    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Edit User' },
+    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Edit User', isAdminRoute: true },
   },
-  // Customer Management
   {
-    path: '/customers',
+    path: 'customers',
     name: 'AdminCustomerList',
     component: CustomerListView,
-    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Customer Management'},
+    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Customer Management', isAdminRoute: true },
   },
   {
-    path: '/customers/:customerId/view',
+    path: 'customers/:customerId/view',
     name: 'AdminCustomerDetail',
     component: CustomerDetailView,
     props: true,
-    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Customer Details' },
+    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Customer Details', isAdminRoute: true },
   },
-  // Account Management
   {
-    path: '/accounts',
+    path: 'accounts',
     name: 'AdminAccountList',
     component: AccountListView,
-    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Account Management' },
+    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Account Management', isAdminRoute: true },
   },
   {
-    path: '/accounts/:accountId/view',
+    path: 'accounts/:accountId/view',
     name: 'AdminAccountDetail',
     component: AccountDetailView,
     props: true,
-    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Account Details' },
+    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Account Details', isAdminRoute: true },
   },
-  // Transaction Monitoring
   {
-    path: '/transactions',
+    path: 'accounts/pending-approval',
+    name: 'AdminPendingAccounts',
+    component: () => import('@admin/views/PendingAccountsView.vue'),
+    meta: { requiresAuth: true, layout: 'AdminLayout', title: 'Pending Accounts', isAdminRoute: true }
+  },
+  {
+    path: 'transactions',
     name: 'AdminTransactionList',
     component: TransactionListView,
-    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Transaction Monitoring' },
+    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Transaction Monitoring', isAdminRoute: true },
   },
   {
-    path: '/transactions/:transactionId/view',
+    path: 'transactions/:transactionId/view',
     name: 'AdminTransactionDetail',
     component: TransactionDetailView,
     props: true,
-    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Transaction Details' },
+    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Transaction Details', isAdminRoute: true },
   },
-  // Audit Logs
   {
-    path: '/audit-logs',
+    path: 'audit-logs',
     name: 'AdminAuditLogList',
     component: AuditLogListView,
-    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Audit Logs' },
+    meta: { layout: 'AdminLayout', requiresAuth: true, title: 'Audit Logs', isAdminRoute: true },
   },
-
-  // Catch-all 404
+  // Admin-specific catch-all, if needed, can be added here or handled by global.
+  // For now, relying on global catch-all. If a specific /admin/not-found is desired:
   {
-    path: '/:pathMatch(.*)*',
-    name: 'AdminNotFound',
-    component: NotFoundView,
-    meta: { layout: 'AdminLayout', title: 'Page Not Found' }, // Or a SimpleLayout
+    path: ':adminPathMatch(.*)*', // Catch-all for /admin sub-paths
+    name: 'AdminModuleNotFound',
+    component: AdminNotFoundView, // Use the admin-specific NotFoundView
+    meta: { layout: 'AdminLayout', title: 'Page Not Found', isAdminRoute: true },
   }
 ];
 
-const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL || '/admin/'), // Base for admin panel
-  routes,
-});
-
-import { useAdminAuthStore } from '@admin/store/adminAuth';
-
-router.beforeEach((to, from, next) => {
-  const adminAuthStore = useAdminAuthStore();
-  const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
-  const isAuthenticated = adminAuthStore.isUserAdminAuthenticated;
-
-  if (requiresAuth && !isAuthenticated) {
-    if (to.name !== 'AdminLogin') {
-        console.log(`Admin Router Guard: Not authenticated for "${String(to.name)}", redirecting to Login.`);
-        next({ name: 'AdminLogin', query: { redirect: to.fullPath } });
-    } else {
-        next();
-    }
-  } else if (to.name === 'AdminLogin' && isAuthenticated) {
-    console.log(`Admin Router Guard: Authenticated, redirecting from Login to Dashboard.`);
-    next({ name: 'AdminDashboard' });
-  } else {
-    next();
-  }
-});
-
-export default router;
+export default adminRoutes;
 ```

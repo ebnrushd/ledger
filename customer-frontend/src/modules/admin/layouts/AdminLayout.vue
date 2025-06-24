@@ -27,6 +27,13 @@
         >
           <i class="fas fa-university mr-3"></i> Accounts
         </router-link>
+        <router-link
+            :to="{ name: 'AdminPendingAccounts' }"
+            class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white"
+            active-class="bg-gray-700 text-white"
+        >
+          <i class="fas fa-tasks mr-3"></i> Pending Approvals
+        </router-link>
          <router-link
             :to="{ name: 'AdminCustomerList' }"  {# Assuming AdminCustomerList route name #}
           class="flex items-center py-2.5 px-4 rounded transition duration-200 hover:bg-gray-700 hover:text-white"

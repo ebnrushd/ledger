@@ -185,7 +185,7 @@ export default defineComponent({
 
 
 .table-header {
-  @apply px-5 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-100;
+  @apply px-5 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider bg-gray-100;
 }
 .table-cell {
   @apply px-5 py-4 whitespace-nowrap text-sm text-gray-700;

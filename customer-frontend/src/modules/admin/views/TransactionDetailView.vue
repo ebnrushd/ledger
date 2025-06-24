@@ -102,7 +102,7 @@
 
 <script lang="ts">
 import { defineComponent, onMounted, computed, onUnmounted } from 'vue';
-import { useAdminTransactionsStore } from '@/store/adminTransactions';
+import { useAdminTransactionsStore } from '@admin/store/adminTransactions';
 import { storeToRefs } from 'pinia'; // For reactive access to store state
 
 export default defineComponent({

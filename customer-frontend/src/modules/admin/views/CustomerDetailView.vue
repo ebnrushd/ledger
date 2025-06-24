@@ -108,9 +108,9 @@
 <script lang="ts">
 import { defineComponent, ref, onMounted, computed, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router'; // Or use props
-import { useAdminCustomersStore } from '@/store/adminCustomers';
+import { useAdminCustomersStore } from '@admin/store/adminCustomers';
 import { storeToRefs } from 'pinia';
-import type { Account } from '@/types/account'; // For explicit typing if needed for accounts list
+import type { Account } from '@admin/types/account'; // For explicit typing if needed for accounts list
 
 export default defineComponent({
   name: 'CustomerDetailView',

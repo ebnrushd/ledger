@@ -81,9 +81,9 @@
               <td class="table-cell">{{ new Date(user.created_at).toLocaleDateString() }}</td>
               <td class="table-cell space-x-2 whitespace-nowrap">
                 <router-link :to="{ name: 'AdminUserDetail', params: { userId: user.user_id } }"
-                             class="px-3 py-1 text-xs font-medium text-white bg-blue-500 rounded hover:bg-blue-600 transition">View</router-link>
+                             class="px-3 py-1 text-xs font-medium text-white bg-admin-primary rounded hover:bg-blue-700 transition">View</router-link>
                 <router-link :to="{ name: 'AdminUserEdit', params: { userId: user.user_id } }"
-                             class="px-3 py-1 text-xs font-medium text-white bg-yellow-500 rounded hover:bg-yellow-600 transition">Edit</router-link>
+                             class="px-3 py-1 text-xs font-medium text-white bg-admin-accent rounded hover:bg-green-700 transition">Edit</router-link>
               </td>
             </tr>
             <tr v-if="usersStore.users.length === 0">
@@ -110,7 +110,7 @@
 
 <script lang="ts">
 import { defineComponent, ref, onMounted, reactive, watch } from 'vue';
-import { useAdminUsersStore } from '@/store/adminUsers';
+import { useAdminUsersStore } from '@admin/store/adminUsers';
 import { storeToRefs } from 'pinia';
 import { useRouter, useRoute } from 'vue-router';
 
@@ -199,7 +199,7 @@ export default defineComponent({
 
 <style scoped>
 .table-header {
-  @apply px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-100;
+  @apply px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider bg-gray-100;
 }
 .table-cell {
   @apply px-4 py-3 whitespace-nowrap text-sm text-gray-700;

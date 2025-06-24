@@ -71,13 +71,20 @@ def open_account(customer_id, account_type, initial_balance=Decimal("0.00"), cur
         raise InvalidAccountTypeError(f"Account type '{account_type}' is not supported.")
 
     account_number = _generate_unique_account_number(conn=conn) # Pass conn
-    active_status_id = get_account_status_id('active', conn=conn) # Pass conn
+
+    status_id_to_use: int
+    if initial_status_id is not None:
+        # Optional: Validate if this status_id exists, or trust the caller / FK constraint
+        # For now, directly use it. A more robust version might fetch by ID to confirm.
+        status_id_to_use = initial_status_id
+    else:
+        status_id_to_use = get_account_status_id('active', conn=conn) # Pass conn
 
     query = """
         INSERT INTO accounts (customer_id, account_number, account_type, balance, currency, status_id, opened_at, updated_at)
         VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW()) RETURNING account_id;
     """
-    params = (customer_id, account_number, account_type.lower(), initial_balance, currency, active_status_id)
+    params = (customer_id, account_number, account_type.lower(), initial_balance, currency, status_id_to_use)
 
     _conn_needs_managing = False
     if conn is None:

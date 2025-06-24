@@ -87,7 +87,7 @@
 
 <script lang="ts">
 import { defineComponent, ref, onMounted, reactive, watch } from 'vue';
-import { useAdminCustomersStore } from '@/store/adminCustomers';
+import { useAdminCustomersStore } from '@admin/store/adminCustomers';
 import { storeToRefs } from 'pinia'; // Optional, for cleaner access to reactive props
 import { useRouter, useRoute } from 'vue-router';
 

@@ -123,7 +123,7 @@
 
 <script lang="ts">
 import { defineComponent, onMounted, reactive, watch } from 'vue';
-import { useAdminTransactionsStore } from '@/store/adminTransactions';
+import { useAdminTransactionsStore } from '@admin/store/adminTransactions';
 import { useRouter, useRoute } from 'vue-router';
 // Helper to convert "" to null for optional number filters if needed, or handle in service/API.
 
